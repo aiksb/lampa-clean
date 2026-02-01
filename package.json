@@ -1,0 +1,34 @@
+{
+    "name": "lampa-clean-mirror",
+    "version": "1.0.0",
+    "description": "Clean, ad-free version of Lampa with custom plugin marketplace",
+    "main": "index.html",
+    "scripts": {
+        "start": "python3 -m http.server 8000",
+        "serve": "npx http-server -p 8000 -c-1",
+        "validate": "node scripts/validate.js",
+        "test": "echo \"No tests yet\" && exit 0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/[your-username]/lampa-clean.git"
+    },
+    "keywords": [
+        "lampa",
+        "streaming",
+        "movies",
+        "tv-shows",
+        "online-cinema",
+        "ad-free",
+        "plugins"
+    ],
+    "author": "Lampa Clean Mirror Contributors",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/[your-username]/lampa-clean/issues"
+    },
+    "homepage": "https://github.com/[your-username]/lampa-clean#readme",
+    "devDependencies": {
+        "http-server": "^14.1.1"
+    }
+}

@@ -1,0 +1,239 @@
+{
+    "groups": [
+        {
+            "title": "🎥 Онлайн просмотр",
+            "plugins": [
+                {
+                    "name": "Онлайн Stream",
+                    "url": "http://arkmv.ru/vod",
+                    "description": "Онлайн просмотр фильмов и сериалов",
+                    "auto_load": false
+                },
+                {
+                    "name": "Онлайн Prestige",
+                    "url": "https://bwa.to/plugins/prestige.js",
+                    "description": "Prestige онлайн кинотеатр",
+                    "auto_load": false
+                },
+                {
+                    "name": "Stream 2 (LLPP)",
+                    "url": "http://llpp.in/v/vod.js",
+                    "description": "Альтернативный стриминг сервис",
+                    "auto_load": false
+                },
+                {
+                    "name": "Online Mod (NB557)",
+                    "url": "https://nb557.github.io/plugins/online_mod.js",
+                    "description": "Модифицированный онлайн плеер",
+                    "auto_load": false
+                },
+                {
+                    "name": "Online MODS's",
+                    "url": "http://lampa.stream/modss",
+                    "description": "Коллекция модификаций для онлайн просмотра",
+                    "auto_load": false
+                },
+                {
+                    "name": "Durex.Monster",
+                    "url": "http://durex.monster/online.js",
+                    "description": "Онлайн кинотеатр Durex",
+                    "auto_load": false
+                },
+                {
+                    "name": "BwaRC",
+                    "url": "https://bwa.to/rc",
+                    "description": "BWA Remote Control",
+                    "auto_load": false
+                },
+                {
+                    "name": "VideoCDN (Skaz)",
+                    "url": "http://skaz.tv/vcdn.js",
+                    "description": "VideoCDN интеграция",
+                    "auto_load": false
+                },
+                {
+                    "name": "Showy (Alternatve)",
+                    "url": "http://showy.online/m.js",
+                    "description": "Альтернативный онлайн сервис",
+                    "auto_load": false
+                }
+            ]
+        },
+        {
+            "title": "🌊 Торренты",
+            "plugins": [
+                {
+                    "name": "Jackett Switcher",
+                    "url": "https://bylampa.github.io/jackett.js",
+                    "description": "Переключатель между Jackett серверами",
+                    "auto_load": false
+                },
+                {
+                    "name": "Parsers for TorrServer",
+                    "url": "http://cub.red/plugin/etor",
+                    "description": "Парсеры для TorrServer",
+                    "auto_load": false
+                },
+                {
+                    "name": "Local TS Checker",
+                    "url": "http://193.233.134.21/plugins/checker.js",
+                    "description": "Проверка локального TorrServer",
+                    "auto_load": false
+                },
+                {
+                    "name": "TS Preload Visual (RootU)",
+                    "url": "https://plugin.rootu.top/ts-preload.js",
+                    "description": "Визуальная предзагрузка для TorrServer",
+                    "auto_load": false
+                },
+                {
+                    "name": "Tracks Renamer",
+                    "url": "http://cub.red/plugin/tracks",
+                    "description": "Переименование аудио/субтитров",
+                    "auto_load": false
+                },
+                {
+                    "name": "TorrDownloader (TD)",
+                    "url": "https://lampame.github.io/td/td.js",
+                    "description": "Загрузчик торрентов",
+                    "auto_load": false
+                },
+                {
+                    "name": "Second Torrents Button",
+                    "url": "https://github.freebie.tom.ru/torrents.js",
+                    "description": "Дополнительная кнопка торрентов",
+                    "auto_load": false
+                }
+            ]
+        },
+        {
+            "title": "📺 IPTV и ТВ",
+            "plugins": [
+                {
+                    "name": "IPTV (CUB)",
+                    "url": "http://cub.red/plugin/iptv",
+                    "description": "IPTV плеер от CUB",
+                    "auto_load": false
+                },
+                {
+                    "name": "Diesel TV",
+                    "url": "https://andreyurl54.github.io/diesel5/diesel.js",
+                    "description": "Diesel TV каналы",
+                    "auto_load": false
+                },
+                {
+                    "name": "Kulik CORS",
+                    "url": "http://cdn.kulik.uz/cors",
+                    "description": "CORS прокси для IPTV",
+                    "auto_load": false
+                },
+                {
+                    "name": "Hack TV",
+                    "url": "https://bylampa.github.io/tv.js",
+                    "description": "Модифицированный ТВ плеер",
+                    "auto_load": false
+                }
+            ]
+        },
+        {
+            "title": "🛠️ Разное и Утилиты",
+            "plugins": [
+                {
+                    "name": "No CUB Premium Ads",
+                    "url": "https://bylampa.github.io/cub_off.js",
+                    "description": "Блокировка рекламы CUB Premium",
+                    "auto_load": true
+                },
+                {
+                    "name": "Account Sync (No CUB)",
+                    "url": "https://bylampa.github.io/account.js",
+                    "description": "Синхронизация аккаунта без CUB",
+                    "auto_load": false
+                },
+                {
+                    "name": "TMDB Proxy (Start)",
+                    "url": "https://bylampa.github.io/start.js",
+                    "description": "TMDB прокси для доступа к базе данных",
+                    "auto_load": false
+                },
+                {
+                    "name": "Collections",
+                    "url": "https://cub.red/plugin/collections",
+                    "description": "Управление коллекциями",
+                    "auto_load": false
+                },
+                {
+                    "name": "Weather",
+                    "url": "https://bylampa.github.io/weather.js",
+                    "description": "Виджет погоды",
+                    "auto_load": false
+                },
+                {
+                    "name": "Rezka Comments",
+                    "url": "https://BDVBurik.github.io/rezkacommentwo.js",
+                    "description": "Комментарии с HDRezka",
+                    "auto_load": false
+                },
+                {
+                    "name": "Gold Theme",
+                    "url": "https://bazzzilius.github.io/scripts/gold_theme.js",
+                    "description": "Золотая тема оформления",
+                    "auto_load": false
+                },
+                {
+                    "name": "Old Style Menu",
+                    "url": "http://github.freebie.tom.ru/want.js",
+                    "description": "Меню в старом стиле",
+                    "auto_load": false
+                },
+                {
+                    "name": "No Trailers",
+                    "url": "http://llpp.in/ur/notrailer.js",
+                    "description": "Отключение трейлеров",
+                    "auto_load": false
+                },
+                {
+                    "name": "No Anime",
+                    "url": "http://llpp.in/ur/noanime.js",
+                    "description": "Скрытие аниме контента",
+                    "auto_load": false
+                },
+                {
+                    "name": "Reset Subs (WebOS)",
+                    "url": "https://nb557.github.io/plugins/reset_subs.js",
+                    "description": "Сброс субтитров для WebOS",
+                    "auto_load": false
+                },
+                {
+                    "name": "Interface Mod",
+                    "url": "https://bylampa.github.io/interface.js",
+                    "description": "Модификация интерфейса",
+                    "auto_load": false
+                },
+                {
+                    "name": "Tricks",
+                    "url": "https://andreyurl54.github.io/diesel5/tricks.js",
+                    "description": "Различные трюки и улучшения",
+                    "auto_load": false
+                }
+            ]
+        },
+        {
+            "title": "🔞 18+ (Клубничка)",
+            "plugins": [
+                {
+                    "name": "Strawberry (New)",
+                    "url": "https://bwa.to/s",
+                    "description": "Новая версия клубничного плагина",
+                    "auto_load": false
+                },
+                {
+                    "name": "Strawberry (Old)",
+                    "url": "http://bwa-cloud.cfhttp.top/sisi.js",
+                    "description": "Старая версия клубничного плагина",
+                    "auto_load": false
+                }
+            ]
+        }
+    ]
+}

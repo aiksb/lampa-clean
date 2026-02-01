@@ -1,0 +1,192 @@
+name: Update and Deploy Lampa
+
+on:
+  # Run daily at midnight UTC
+  schedule:
+    - cron: '0 0 * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+  
+  # Run on push to main (for testing)
+  push:
+    branches:
+      - main
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout our repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Configure Git
+        run: |
+          git config user.name "Lampa Clean Bot"
+          git config user.email "bot@lampa-clean.local"
+      
+      - name: Add official Lampa as upstream
+        run: |
+          git remote add upstream https://github.com/lampa-app/Lampa.git || true
+          git fetch upstream
+      
+      - name: Check for updates
+        id: check_updates
+        run: |
+          # Get latest commit from upstream
+          UPSTREAM_COMMIT=$(git rev-parse upstream/main)
+          
+          # Check if we already have this commit
+          if git merge-base --is-ancestor $UPSTREAM_COMMIT HEAD; then
+            echo "No updates available"
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+          else
+            echo "Updates available"
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            echo "upstream_commit=$UPSTREAM_COMMIT" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Backup our custom files
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          mkdir -p .backup
+          cp -r src .backup/
+          cp plugins.json .backup/
+          cp -r docs .backup/ || true
+          cp README.md .backup/ || true
+          cp CHANGELOG.md .backup/ || true
+          cp ROADMAP.md .backup/ || true
+      
+      - name: Merge upstream changes
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          # Try to merge with our strategy
+          git merge upstream/main -X ours --allow-unrelated-histories -m "chore: merge upstream Lampa updates" || {
+            echo "Merge conflict detected, resolving..."
+            # In case of conflicts, prefer our files for custom ones
+            git checkout --ours src/ plugins.json docs/ README.md CHANGELOG.md ROADMAP.md || true
+            git add .
+            git commit -m "chore: merge upstream Lampa updates (conflicts resolved)" || true
+          }
+      
+      - name: Restore our custom files
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          # Ensure our custom files are preserved
+          cp -r .backup/src ./ || true
+          cp .backup/plugins.json ./ || true
+          cp -r .backup/docs ./ || true
+          cp .backup/README.md ./ || true
+          cp .backup/CHANGELOG.md ./ || true
+          cp .backup/ROADMAP.md ./ || true
+          rm -rf .backup
+      
+      - name: Inject plugin loader into index.html
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          # Check if index.html exists
+          if [ -f "index.html" ]; then
+            # Check if loader is already injected
+            if ! grep -q "src/loader.js" index.html; then
+              # Inject our loader script before closing </body> tag
+              sed -i 's|</body>|<script src="./src/loader.js"></script>\n</body>|' index.html
+              echo "Plugin loader injected into index.html"
+            else
+              echo "Plugin loader already present in index.html"
+            fi
+          else
+            echo "Warning: index.html not found, using our template"
+          fi
+      
+      - name: Update version in files
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          # Update version with timestamp
+          VERSION="1.0.0+$(date +%Y%m%d)"
+          echo "Updated to version $VERSION"
+          
+          # Update package.json if exists
+          if [ -f "package.json" ]; then
+            sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
+          fi
+      
+      - name: Run tests
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          # Basic validation tests
+          echo "Running validation tests..."
+          
+          # Check if required files exist
+          test -f "index.html" || exit 1
+          test -f "src/loader.js" || exit 1
+          test -f "plugins.json" || exit 1
+          
+          # Validate JSON
+          if command -v jq &> /dev/null; then
+            jq empty plugins.json || exit 1
+            echo "✓ plugins.json is valid"
+          fi
+          
+          # Check if loader is injected
+          grep -q "src/loader.js" index.html || exit 1
+          echo "✓ Plugin loader is injected"
+          
+          echo "All tests passed!"
+      
+      - name: Commit changes
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          git add .
+          git diff --staged --quiet || git commit -m "chore: update from upstream Lampa ($(date +%Y-%m-%d))"
+      
+      - name: Push changes
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          git push origin main
+      
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        if: steps.check_updates.outputs.has_updates == 'true' || github.event_name == 'workflow_dispatch'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          publish_branch: gh-pages
+          exclude_assets: '.github,docs,.gitignore,.backup'
+      
+      - name: Create release notes
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          VERSION="1.0.0+$(date +%Y%m%d)"
+          echo "## Release $VERSION" > release_notes.md
+          echo "" >> release_notes.md
+          echo "### Updates" >> release_notes.md
+          echo "- Merged latest changes from official Lampa" >> release_notes.md
+          echo "- Upstream commit: ${{ steps.check_updates.outputs.upstream_commit }}" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Lampa Clean Features" >> release_notes.md
+          echo "- ✨ Ad-free experience" >> release_notes.md
+          echo "- 🔌 Custom plugin marketplace" >> release_notes.md
+          echo "- 🔄 Auto-updates from official Lampa" >> release_notes.md
+          
+          cat release_notes.md
+      
+      - name: Notify on success
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          echo "✅ Successfully updated and deployed Lampa Clean Mirror"
+          echo "🚀 Live at: https://[your-username].github.io/lampa-clean"
+      
+      - name: Notify on no updates
+        if: steps.check_updates.outputs.has_updates == 'false'
+        run: |
+          echo "ℹ️ No updates available from upstream Lampa"
+          echo "Current version is up to date"
