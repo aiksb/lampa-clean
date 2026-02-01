@@ -145,6 +145,12 @@
                     "auto_load": true
                 },
                 {
+                    "name": "XiaomiShka AdBlock",
+                    "url": "https://xiaomishka.github.io/lampa/ads.js",
+                    "description": "Универсальный блокировщик рекламы для Lampa",
+                    "auto_load": true
+                },
+                {
                     "name": "Account Sync (No CUB)",
                     "url": "https://bylampa.github.io/account.js",
                     "description": "Синхронизация аккаунта без CUB",
