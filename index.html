@@ -1,172 +1,36 @@
-<!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
+
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    
-    <!-- SEO Meta Tags -->
-    <title>Lampa Clean - Онлайн кинотеатр без рекламы</title>
-    <meta name="description" content="Чистая версия Lampa с собственным магазином плагинов. Смотрите фильмы и сериалы онлайн без рекламы.">
-    <meta name="keywords" content="lampa, онлайн кинотеатр, фильмы, сериалы, без рекламы">
-    <meta name="author" content="Lampa Clean Mirror">
-    
-    <!-- Open Graph / Social Media -->
-    <meta property="og:type" content="website">
-    <meta property="og:title" content="Lampa Clean - Онлайн кинотеатр без рекламы">
-    <meta property="og:description" content="Чистая версия Lampa с собственным магазином плагинов">
-    <meta property="og:image" content="./assets/og-image.png">
-    
-    <!-- Security -->
-    <meta http-equiv="Content-Security-Policy" 
-          content="default-src 'self'; 
-                   script-src 'self' 'unsafe-inline' 'unsafe-eval' https: http:; 
-                   style-src 'self' 'unsafe-inline' https:;
-                   img-src 'self' data: https: http:;
-                   connect-src *;
-                   font-src 'self' data: https:;
-                   media-src *;">
-    
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" href="./assets/favicon.png">
-    
-    <!-- Preload Critical Resources -->
-    <link rel="preload" href="./src/loader.js" as="script">
-    
-    <style>
-        /* Loading Screen */
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #000;
-            color: #fff;
-        }
-        
-        #lampa-clean-loader {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 99999;
-            transition: opacity 0.5s;
-        }
-        
-        #lampa-clean-loader.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-        
-        .loader-logo {
-            font-size: 72px;
-            margin-bottom: 20px;
-            animation: pulse 2s ease-in-out infinite;
-        }
-        
-        .loader-text {
-            font-size: 24px;
-            font-weight: 300;
-            margin-bottom: 30px;
-        }
-        
-        .loader-spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        .loader-version {
-            position: absolute;
-            bottom: 30px;
-            font-size: 14px;
-            opacity: 0.7;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-        }
-    </style>
+    <title>Lampa Clean Mirror</title>
+
+    <link rel="stylesheet" href="./vender/scrollbar/jquery.scrollbar.css">
+    <link rel="stylesheet" href="./vender/keypad/style.css">
+    <link rel="stylesheet" href="css/app.css?v=2.84">
 </head>
+
 <body>
-    <!-- Loading Screen -->
-    <div id="lampa-clean-loader">
-        <div class="loader-logo">🎬</div>
-        <div class="loader-text">Lampa Clean Mirror</div>
-        <div class="loader-spinner"></div>
-        <div class="loader-version">v1.0.0 | Загрузка...</div>
+    <div class="welcome"></div>
+
+    <div id="app">
+
     </div>
 
-    <!-- Main Application Container -->
-    <div id="app"></div>
 
-    <!-- CRITICAL: Load our plugin loader FIRST -->
-    <script src="./src/loader.js"></script>
+    <script src="./vender/jquery/jquery.js"></script>
+    <script src="./vender/notify/notify.js"></script>
+    <script src="./vender/scrollbar/jquery.scrollbar.js"></script>
+    <script src="./vender/navigator/navigator.js"></script>
+    <script src="./vender/keypad/keypad.js"></script>
+    <script src="http://www.youtube.com/iframe_api" async></script>
 
-    <!-- 
-        NOTE: This is a placeholder index.html
-        The actual Lampa application will be integrated here via GitHub Actions workflow
-        
-        The workflow will:
-        1. Clone official Lampa repository
-        2. Copy Lampa's index.html content here
-        3. Inject our loader.js script
-        4. Deploy to GitHub Pages
-        
-        For local development, you can manually clone Lampa and copy the files.
-    -->
+    <!-- Lampa Application -->
+    <script src="app.js"></script>
 
-    <script>
-        // Hide loader when page is fully loaded
-        window.addEventListener('load', function() {
-            setTimeout(function() {
-                const loader = document.getElementById('lampa-clean-loader');
-                if (loader) {
-                    loader.classList.add('hidden');
-                    setTimeout(function() {
-                        loader.remove();
-                    }, 500);
-                }
-            }, 1000);
-        });
-
-        // Development mode detection
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            console.log('%c🔧 Development Mode', 'color: #667eea; font-size: 16px; font-weight: bold;');
-            console.log('%cLampa Clean Mirror is running in development mode.', 'color: #aaa;');
-            console.log('%cTo integrate official Lampa, run the GitHub Actions workflow or manually copy Lampa files.', 'color: #aaa;');
-        }
-
-        // Error handling
-        window.addEventListener('error', function(e) {
-            console.error('[Lampa Clean] Global error:', e.error);
-        });
-
-        window.addEventListener('unhandledrejection', function(e) {
-            console.error('[Lampa Clean] Unhandled promise rejection:', e.reason);
-        });
-    </script>
-
-    <!-- Analytics (Optional, Privacy-First) -->
-    <!-- Uncomment if you want to add privacy-friendly analytics -->
-    <!--
-    <script>
-        // Add your privacy-friendly analytics here
-        // Example: Plausible, Simple Analytics, etc.
-    </script>
-    -->
+    <!-- Custom Plugin Marketplace -->
+    <script src="src/loader.js"></script>
 </body>
+
 </html>
