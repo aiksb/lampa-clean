@@ -1,8 +1,15 @@
 /**
- * Lampa Clean - Ad Blocker v1.0
+ * Lampa Clean - Ad Blocker v1.1
+ * Provider: Lampa Clean (github.com/aiksb/lampa-clean)
  * 
  * Clean ad blocking without domain locks.
- * Based on analysis of obfuscated bylampa/cub_off.js but rewritten from scratch.
+ * Combines multiple ad blocking techniques:
+ * - Settings overrides
+ * - CSS injection
+ * - Fetch interception  
+ * - Premium status spoof
+ * - Video element proxy
+ * - Timer clearing
  * 
  * Blocks:
  * - Pre-roll ads before movies
@@ -14,7 +21,7 @@
 (function () {
     'use strict';
 
-    console.log('[Lampa Clean AdBlock] Initializing...');
+    console.log('[Lampa Clean AdBlock v1.1] Initializing...');
 
     // ==================== LAMPA SETTINGS OVERRIDES ====================
     // Disable all premium/ad features at the settings level
@@ -60,6 +67,64 @@
     // Force TV platform for better compatibility
     if (window.Lampa?.Platform?.tv) {
         Lampa.Platform.tv();
+    }
+
+    // ==================== PREMIUM STATUS SPOOF ====================
+    // Fallback method from ads.js - spoof premium account status
+    window.Account = window.Account || {};
+    window.Account.hasPremium = () => true;
+
+    // Also spoof Lampa.Account if exists
+    if (window.Lampa?.Account) {
+        window.Lampa.Account.hasPremium = () => true;
+    }
+
+    // ==================== VIDEO ELEMENT PROXY ====================
+    // Fallback method from ads.js - intercept video creation for ads
+    const originalCreateElement = document.createElement.bind(document);
+    document.createElement = new Proxy(originalCreateElement, {
+        apply(target, thisArg, args) {
+            const element = target.apply(thisArg, args);
+
+            if (args[0] === 'video') {
+                // Flag to track if this is an ad video
+                let isAdVideo = false;
+
+                // Override play to detect and block ad videos
+                const originalPlay = element.play.bind(element);
+                element.play = function () {
+                    // Check if this might be an ad video by looking at src
+                    const src = element.src || element.currentSrc || '';
+                    if (src.includes('ad') || src.includes('preroll') || src.includes('commercial')) {
+                        console.log('[Lampa Clean AdBlock] Blocking ad video play:', src);
+                        isAdVideo = true;
+
+                        // Simulate video end to skip ad
+                        setTimeout(() => {
+                            element.dispatchEvent(new Event('ended'));
+                        }, 100);
+
+                        return Promise.resolve();
+                    }
+
+                    return originalPlay();
+                };
+            }
+
+            return element;
+        }
+    });
+
+    // ==================== AD TIMER CLEARING ====================
+    // Fallback method from ads.js - clear ad-related timers
+    function clearAdTimers() {
+        console.log('[Lampa Clean AdBlock] Clearing potential ad timers...');
+        const highestId = setTimeout(() => { }, 0);
+        // Only clear a reasonable range to avoid breaking app functionality
+        const startId = Math.max(0, highestId - 50);
+        for (let i = startId; i <= highestId; i++) {
+            clearTimeout(i);
+        }
     }
 
     // ==================== CSS INJECTION ====================
@@ -276,6 +341,9 @@
         blockVideoAds();
         blockPrerollAds();
 
+        // Clear potential ad timers on load
+        setTimeout(clearAdTimers, 1000);
+
         if (window.Lampa) {
             setupEventListeners();
             removeAds();
@@ -286,17 +354,19 @@
                     setTimeout(function () {
                         setupEventListeners();
                         removeAds();
+                        clearAdTimers();
                     }, 500);
                 });
             } else {
                 setTimeout(function () {
                     setupEventListeners();
                     removeAds();
+                    clearAdTimers();
                 }, 500);
             }
         }
 
-        console.log('[Lampa Clean AdBlock] Initialized successfully');
+        console.log('[Lampa Clean AdBlock v1.1] Initialized - Provider: Lampa Clean');
     }
 
     init();

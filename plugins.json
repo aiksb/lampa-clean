@@ -123,16 +123,22 @@
             "title": "⚙️ Управление",
             "plugins": [
                 {
-                    "name": "XiaomiShka AdBlock",
-                    "url": "https://xiaomishka.github.io/lampa/ads.js",
-                    "description": "Универсальный блокировщик рекламы",
+                    "name": "🛡️ AdBlock Clean",
+                    "url": "./plugins/adblock.js",
+                    "description": "✅ [Lampa Clean] Блокировщик рекламы v1.1",
                     "auto_load": true
                 },
                 {
-                    "name": "🛡️ AdBlock Clean",
-                    "url": "./plugins/adblock.js",
-                    "description": "✅ Наш блокировщик рекламы без привязок",
+                    "name": "🔧 Plugin Loader",
+                    "url": "./src/loader.js",
+                    "description": "✅ [Lampa Clean] Загрузчик плагинов v2.2",
                     "auto_load": true
+                },
+                {
+                    "name": "XiaomiShka AdBlock",
+                    "url": "https://xiaomishka.github.io/lampa/ads.js",
+                    "description": "Альтернативный блокировщик (fallback)",
+                    "auto_load": false
                 },
                 {
                     "name": "Cub OFF (bylampa)",
