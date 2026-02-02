@@ -214,8 +214,16 @@
             notify('✓ ' + plugin.name + ' установлен');
             return true;
         } catch (error) {
-            console.error('[Lampa Clean] Install failed:', error);
-            notify('✗ Ошибка: ' + plugin.name);
+            console.error('[Lampa Clean] Install failed:', plugin.url, error);
+
+            let errorMsg = 'Ошибка загрузки';
+            if (error.message === 'Timeout') {
+                errorMsg = 'Таймаут - сервер не отвечает';
+            } else if (error.message === 'Load failed') {
+                errorMsg = 'Сервер недоступен или заблокирован';
+            }
+
+            notify('✗ ' + plugin.name + ': ' + errorMsg);
             return false;
         }
     }

@@ -182,14 +182,14 @@
             "title": "🎥 Онлайн",
             "plugins": [
                 {
-                    "name": "Онлайн Prestige",
+                    "name": "Онлайн Prestige (BWA)",
                     "url": "https://bwa.to/plugins/prestige.js",
-                    "description": "Популярный балансер (BWA)"
+                    "description": "⛔ Сервер недоступен - bwa.to не отвечает"
                 },
                 {
                     "name": "Онлайн Mod (NB557)",
                     "url": "https://nb557.github.io/plugins/online_mod.js",
-                    "description": "Классический мод просмотра"
+                    "description": "✅ Рабочий классический мод просмотра"
                 },
                 {
                     "name": "Онлайн Stream",
