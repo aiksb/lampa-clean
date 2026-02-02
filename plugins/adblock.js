@@ -70,13 +70,29 @@
     }
 
     // ==================== PREMIUM STATUS SPOOF ====================
-    // Fallback method from ads.js - spoof premium account status
-    window.Account = window.Account || {};
-    window.Account.hasPremium = () => true;
+    // Fallback method - spoof premium account status (wrapped in try-catch for read-only props)
+    try {
+        window.Account = window.Account || {};
+        Object.defineProperty(window.Account, 'hasPremium', {
+            value: () => true,
+            writable: true,
+            configurable: true
+        });
+    } catch (e) {
+        console.log('[Lampa Clean AdBlock] Account.hasPremium already defined');
+    }
 
     // Also spoof Lampa.Account if exists
-    if (window.Lampa?.Account) {
-        window.Lampa.Account.hasPremium = () => true;
+    try {
+        if (window.Lampa?.Account) {
+            Object.defineProperty(window.Lampa.Account, 'hasPremium', {
+                value: () => true,
+                writable: true,
+                configurable: true
+            });
+        }
+    } catch (e) {
+        console.log('[Lampa Clean AdBlock] Lampa.Account.hasPremium protected');
     }
 
     // ==================== VIDEO ELEMENT PROXY ====================
