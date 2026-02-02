@@ -123,27 +123,21 @@
             "title": "⚙️ Управление",
             "plugins": [
                 {
-                    "name": "🛡️ AdBlock Clean",
-                    "url": "./plugins/adblock.js",
-                    "description": "✅ [Lampa Clean] Блокировщик рекламы v1.1",
+                    "name": "🛡️ aiksb-adblock",
+                    "url": "./plugins/local/management/aiksb-adblock.js",
+                    "description": "✅ [aiksb] Блокировщик рекламы v1.2 - убирает преролл, CUB Premium, баннеры",
                     "auto_load": true
                 },
                 {
-                    "name": "🔧 Plugin Loader",
-                    "url": "./src/loader.js",
-                    "description": "✅ [Lampa Clean] Загрузчик плагинов v2.2",
+                    "name": "🔧 aiksb-loader",
+                    "url": "./plugins/local/management/aiksb-loader.js",
+                    "description": "✅ [aiksb] Загрузчик плагинов v2.2 - меню плагинов в настройках",
                     "auto_load": true
                 },
                 {
                     "name": "XiaomiShka AdBlock",
                     "url": "https://xiaomishka.github.io/lampa/ads.js",
                     "description": "Альтернативный блокировщик (fallback)",
-                    "auto_load": false
-                },
-                {
-                    "name": "Cub OFF (bylampa)",
-                    "url": "https://bylampa.github.io/cub_off.js",
-                    "description": "⛔ Привязка к домену bylampa - НЕ РАБОТАЕТ",
                     "auto_load": false
                 },
                 {
