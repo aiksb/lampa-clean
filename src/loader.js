@@ -18,16 +18,24 @@
         PLUGIN_DB_URL: './plugins.json',
         STORAGE_KEY: 'lampa_clean_plugins',
         PROFILES_KEY: 'lampa_clean_profiles',
+        SOURCE_KEY: 'lampa_clean_source',
         PLUGIN_TIMEOUT: 15000,
         RETRY_ATTEMPTS: 2,
         RETRY_DELAY: 1000,
+        // Base URL for local plugins (self-hosted)
+        LOCAL_PLUGINS_BASE: './plugins/local/',
         // CORS proxies for HTTP content on HTTPS sites
         CORS_PROXIES: [
             'https://corsproxy.io/?',
             'https://api.allorigins.win/raw?url=',
             'https://cors-anywhere.herokuapp.com/'
         ],
-        CURRENT_PROXY_INDEX: 0
+        CURRENT_PROXY_INDEX: 0,
+        // Plugin sources: 'original' or 'local'
+        SOURCES: {
+            ORIGINAL: 'original',  // Load from original URLs (with proxy if needed)
+            LOCAL: 'local'         // Load from our repository  
+        }
     };
 
     // ==================== STATE ====================
@@ -86,13 +94,59 @@
         }
     }
 
+    // ==================== SOURCE MANAGEMENT ====================
+    function getPluginSource() {
+        try {
+            return localStorage.getItem(CONFIG.SOURCE_KEY) || CONFIG.SOURCES.ORIGINAL;
+        } catch (e) {
+            return CONFIG.SOURCES.ORIGINAL;
+        }
+    }
+
+    function setPluginSource(source) {
+        try {
+            localStorage.setItem(CONFIG.SOURCE_KEY, source);
+            console.log('[Lampa Clean] Plugin source set to:', source);
+        } catch (e) {
+            console.error('[Lampa Clean] Failed to save source:', e);
+        }
+    }
+
+    // Map original URL to local path
+    function getLocalUrl(url) {
+        if (!url) return url;
+
+        // Extract filename from URL
+        let filename = url.split('/').pop().split('?')[0];
+        if (!filename || filename === '') {
+            // For URLs like http://cub.red/plugin/radio - use last path segment
+            const parts = url.split('/').filter(p => p && p !== '');
+            filename = parts[parts.length - 1];
+        }
+
+        // Search in local plugins (we need to check all subdirs)
+        // For simplicity, construct path based on filename
+        return CONFIG.LOCAL_PLUGINS_BASE + filename;
+    }
+
     // ==================== URL HANDLING ====================
     function fixUrl(url) {
-        // If we're on HTTPS and URL is HTTP, use proxy
+        const source = getPluginSource();
+
+        // If source is local, try to use local copy
+        if (source === CONFIG.SOURCES.LOCAL) {
+            const localUrl = getLocalUrl(url);
+            console.log('[Lampa Clean] Using local source:', localUrl);
+            return localUrl;
+        }
+
+        // Original source: If we're on HTTPS and URL is HTTP, use proxy
         if (window.location.protocol === 'https:' && url.startsWith('http://')) {
             const proxy = CONFIG.CORS_PROXIES[CONFIG.CURRENT_PROXY_INDEX];
+            console.log('[Lampa Clean] Using CORS proxy for:', url);
             return proxy + encodeURIComponent(url);
         }
+
         return url;
     }
 
@@ -390,6 +444,45 @@
         const controller = Lampa.Controller.enabled().name;
 
         Lampa.Settings.clear();
+
+        // ===== SOURCE SELECTION =====
+        const currentSource = getPluginSource();
+        const sourceLabels = {
+            'original': '🌐 Оригинал (через прокси)',
+            'local': '💾 Локальная копия (быстро)'
+        };
+
+        Lampa.Settings.add('source_header', {
+            type: 'title',
+            name: '⚙️ Настройки'
+        });
+
+        Lampa.Settings.add('source_select', {
+            type: 'select',
+            name: 'Источник плагинов',
+            description: currentSource === 'local' ?
+                'Загрузка из репозитория (обновлено: ' + (pluginDatabase?.updated || 'N/A') + ')' :
+                'Загрузка с оригинальных серверов через CORS прокси',
+            values: {
+                'original': sourceLabels['original'],
+                'local': sourceLabels['local']
+            },
+            value: currentSource,
+            onChange: (value) => {
+                setPluginSource(value);
+                notify('Источник изменён: ' + sourceLabels[value], 'success');
+                setTimeout(() => renderSettingsContent(), 300);
+            }
+        });
+
+        // ===== DATABASE INFO =====
+        if (pluginDatabase) {
+            const totalPlugins = pluginDatabase.groups?.reduce((sum, g) => sum + (g.plugins?.length || 0), 0) || 0;
+            Lampa.Settings.add('db_info', {
+                type: 'info',
+                name: `📊 Плагинов: ${totalPlugins} | Обновлено: ${pluginDatabase.updated || 'N/A'}`
+            });
+        }
 
         // ===== PROFILES SECTION =====
         if (pluginDatabase && pluginDatabase.profiles) {
