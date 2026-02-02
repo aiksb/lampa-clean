@@ -1,7 +1,7 @@
 /**
- * Lampa Clean - Plugin System v2.1
+ * Lampa Clean - Plugin System v2.2
  * 
- * Fixed Version - Uses proper Lampa SettingsApi
+ * Fixed: categories inside main component, proper click handlers, colored indicators
  */
 
 (function () {
@@ -30,7 +30,7 @@
     async function init() {
         if (isInitialized) return;
 
-        console.log('[Lampa Clean] Initializing plugin system v2.1...');
+        console.log('[Lampa Clean] Initializing plugin system v2.2...');
 
         try {
             await loadPluginDatabase();
@@ -191,10 +191,14 @@
     }
 
     // ==================== INSTALLATION ====================
+    function isPluginInstalled(plugin) {
+        return installedPlugins.some(p => p.url === plugin.url);
+    }
+
     async function installPlugin(plugin) {
-        if (installedPlugins.some(p => p.url === plugin.url)) {
+        if (isPluginInstalled(plugin)) {
             notify(plugin.name + ' уже установлен');
-            return;
+            return true;
         }
 
         try {
@@ -207,10 +211,12 @@
             });
             saveInstalledPlugins();
 
-            notify(plugin.name + ' установлен ✓');
+            notify('✓ ' + plugin.name + ' установлен');
+            return true;
         } catch (error) {
             console.error('[Lampa Clean] Install failed:', error);
-            notify('Ошибка: ' + plugin.name);
+            notify('✗ Ошибка: ' + plugin.name);
+            return false;
         }
     }
 
@@ -220,7 +226,7 @@
         let success = 0;
         for (const pluginName of profile.plugins) {
             const plugin = findPluginByName(pluginName);
-            if (plugin && !installedPlugins.some(p => p.url === plugin.url)) {
+            if (plugin && !isPluginInstalled(plugin)) {
                 try {
                     await loadPlugin(plugin.url, plugin.name, false);
                     installedPlugins.push({
@@ -249,7 +255,7 @@
     function uninstallPlugin(plugin) {
         installedPlugins = installedPlugins.filter(p => p.url !== plugin.url);
         saveInstalledPlugins();
-        notify(plugin.name + ' удален');
+        notify('✓ ' + plugin.name + ' удален');
     }
 
     // ==================== AUTO LOAD ====================
@@ -283,20 +289,64 @@
         }
     }
 
+    // ==================== CATEGORY POPUP ====================
+    function showCategoryPlugins(group) {
+        const items = group.plugins.map(plugin => {
+            const installed = isPluginInstalled(plugin);
+            const indicator = installed ? '🟢' : '🔴';
+            const httpWarning = plugin.url?.startsWith('http://') ? ' ⚠️' : '';
+
+            return {
+                title: indicator + ' ' + plugin.name + httpWarning,
+                subtitle: plugin.description || '',
+                plugin: plugin,
+                installed: installed
+            };
+        });
+
+        Lampa.Select.show({
+            title: group.title,
+            items: items,
+            onSelect: function (item) {
+                if (item.installed) {
+                    // Ask to uninstall
+                    Lampa.Select.show({
+                        title: item.plugin.name,
+                        items: [
+                            { title: '🗑 Удалить плагин', action: 'uninstall' },
+                            { title: '❌ Отмена', action: 'cancel' }
+                        ],
+                        onSelect: function (action) {
+                            if (action.action === 'uninstall') {
+                                uninstallPlugin(item.plugin);
+                            }
+                        }
+                    });
+                } else {
+                    // Install
+                    installPlugin(item.plugin);
+                }
+            },
+            onBack: function () {
+                Lampa.Controller.toggle('settings_component');
+            }
+        });
+    }
+
     // ==================== SETTINGS COMPONENT ====================
     function registerSettingsComponent() {
         const waitForLampa = setInterval(() => {
             if (window.Lampa?.SettingsApi) {
                 clearInterval(waitForLampa);
 
-                // Register component in settings menu
+                // Register only ONE component
                 Lampa.SettingsApi.addComponent({
                     component: 'lampa_clean_plugins',
                     name: 'Мои плагины',
                     icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>'
                 });
 
-                // Add parameters to the component
+                // Source selector
                 Lampa.SettingsApi.addParam({
                     component: 'lampa_clean_plugins',
                     param: {
@@ -318,87 +368,54 @@
                     }
                 });
 
-                // Add profiles
+                // Add profiles as buttons
                 if (pluginDatabase?.profiles) {
                     pluginDatabase.profiles.forEach((profile, i) => {
                         Lampa.SettingsApi.addParam({
                             component: 'lampa_clean_plugins',
                             param: {
                                 name: 'profile_' + i,
-                                type: 'button'
+                                type: 'trigger',
+                                default: ''
                             },
                             field: {
                                 name: '📦 ' + profile.name,
                                 description: profile.description
                             },
-                            onPress: function () {
+                            onChange: function () {
                                 installProfile(profile);
                             }
                         });
                     });
                 }
 
-                // Add plugin category subcomponents
+                // Add categories as trigger buttons that open popups
                 if (pluginDatabase?.groups) {
                     pluginDatabase.groups.forEach((group, gi) => {
                         if (!group.plugins?.length) return;
 
-                        const componentId = 'lampa_clean_cat_' + gi;
-                        const installedCount = group.plugins.filter(p =>
-                            installedPlugins.some(ip => ip.url === p.url)
-                        ).length;
+                        const installedCount = group.plugins.filter(p => isPluginInstalled(p)).length;
+                        const indicator = installedCount > 0 ? '🟢' : '🔴';
 
-                        // Register category as subcomponent
-                        Lampa.SettingsApi.addComponent({
-                            component: componentId,
-                            name: group.title + ' (' + installedCount + '/' + group.plugins.length + ')',
-                            icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>'
-                        });
-
-                        // Add link to category in main menu
                         Lampa.SettingsApi.addParam({
                             component: 'lampa_clean_plugins',
                             param: {
-                                name: 'cat_link_' + gi,
-                                type: 'button'
+                                name: 'category_' + gi,
+                                type: 'trigger',
+                                default: ''
                             },
                             field: {
-                                name: group.title,
+                                name: indicator + ' ' + group.title,
                                 description: installedCount + ' из ' + group.plugins.length + ' установлено'
                             },
-                            onPress: function () {
-                                Lampa.Settings.open(componentId);
+                            onChange: function () {
+                                showCategoryPlugins(group);
                             }
-                        });
-
-                        // Add plugins to category subcomponent
-                        group.plugins.forEach((plugin, pi) => {
-                            const isInstalled = installedPlugins.some(p => p.url === plugin.url);
-                            const httpWarning = plugin.url?.startsWith('http://') ? ' ⚠️' : '';
-
-                            Lampa.SettingsApi.addParam({
-                                component: componentId,
-                                param: {
-                                    name: 'plugin_' + pi,
-                                    type: 'button'
-                                },
-                                field: {
-                                    name: (isInstalled ? '✓ ' : '') + plugin.name + httpWarning,
-                                    description: plugin.description || ''
-                                },
-                                onPress: function () {
-                                    if (isInstalled) {
-                                        uninstallPlugin(plugin);
-                                    } else {
-                                        installPlugin(plugin);
-                                    }
-                                }
-                            });
                         });
                     });
                 }
 
-                console.log('[Lampa Clean] Settings with categories registered');
+                console.log('[Lampa Clean] Settings v2.2 registered');
             }
         }, 100);
 
