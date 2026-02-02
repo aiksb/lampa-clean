@@ -42,6 +42,23 @@ fi
 # Create directories
 mkdir -p "$LOCAL_DIR"
 
+# Create backup of existing plugins
+BACKUP_DIR="$PROJECT_DIR/plugins/backups"
+mkdir -p "$BACKUP_DIR"
+TODAY=$(date +%Y-%m-%d)
+BACKUP_PATH="$BACKUP_DIR/local_$TODAY"
+
+if [[ -d "$LOCAL_DIR" ]] && [[ $(find "$LOCAL_DIR" -name "*.js" 2>/dev/null | head -1) ]]; then
+    echo -e "${YELLOW}Creating backup: $BACKUP_PATH${NC}"
+    if [[ -d "$BACKUP_PATH" ]]; then
+        echo -e "${YELLOW}Backup already exists for today, skipping...${NC}"
+    else
+        cp -r "$LOCAL_DIR" "$BACKUP_PATH"
+        echo -e "${GREEN}Backup created successfully${NC}"
+    fi
+    echo ""
+fi
+
 # Stats
 TOTAL=0
 SUCCESS=0
