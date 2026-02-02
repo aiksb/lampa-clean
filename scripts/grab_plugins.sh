@@ -10,7 +10,7 @@
 # - Backup before update
 # ============================================================
 
-set -e
+# Don't use set -e - we want to continue on plugin download failures
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

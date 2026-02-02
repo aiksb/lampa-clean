@@ -1,0 +1,7 @@
+(function() {
+  'use strict';
+
+  var hostrc = ["https://rc.bwa.to/sisi.js?v23012026"];
+  Lampa.Utils.putScriptAsync(hostrc, function() {});
+
+})();
