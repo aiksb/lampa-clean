@@ -338,24 +338,53 @@
                     });
                 }
 
-                // Add plugin groups
+                // Add plugin category subcomponents
                 if (pluginDatabase?.groups) {
                     pluginDatabase.groups.forEach((group, gi) => {
                         if (!group.plugins?.length) return;
 
+                        const componentId = 'lampa_clean_cat_' + gi;
+                        const installedCount = group.plugins.filter(p =>
+                            installedPlugins.some(ip => ip.url === p.url)
+                        ).length;
+
+                        // Register category as subcomponent
+                        Lampa.SettingsApi.addComponent({
+                            component: componentId,
+                            name: group.title + ' (' + installedCount + '/' + group.plugins.length + ')',
+                            icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>'
+                        });
+
+                        // Add link to category in main menu
+                        Lampa.SettingsApi.addParam({
+                            component: 'lampa_clean_plugins',
+                            param: {
+                                name: 'cat_link_' + gi,
+                                type: 'button'
+                            },
+                            field: {
+                                name: group.title,
+                                description: installedCount + ' из ' + group.plugins.length + ' установлено'
+                            },
+                            onPress: function () {
+                                Lampa.Settings.open(componentId);
+                            }
+                        });
+
+                        // Add plugins to category subcomponent
                         group.plugins.forEach((plugin, pi) => {
                             const isInstalled = installedPlugins.some(p => p.url === plugin.url);
                             const httpWarning = plugin.url?.startsWith('http://') ? ' ⚠️' : '';
 
                             Lampa.SettingsApi.addParam({
-                                component: 'lampa_clean_plugins',
+                                component: componentId,
                                 param: {
-                                    name: 'plugin_' + gi + '_' + pi,
+                                    name: 'plugin_' + pi,
                                     type: 'button'
                                 },
                                 field: {
                                     name: (isInstalled ? '✓ ' : '') + plugin.name + httpWarning,
-                                    description: plugin.description || group.title
+                                    description: plugin.description || ''
                                 },
                                 onPress: function () {
                                     if (isInstalled) {
@@ -369,7 +398,7 @@
                     });
                 }
 
-                console.log('[Lampa Clean] Settings component registered');
+                console.log('[Lampa Clean] Settings with categories registered');
             }
         }, 100);
 
