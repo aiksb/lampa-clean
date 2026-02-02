@@ -65,9 +65,24 @@ SUCCESS=0
 FAILED=0
 SKIPPED=0
 
-# Function to sanitize filename
+# Function to sanitize filename (use dashes, not underscores)
 sanitize_filename() {
-    echo "$1" | sed 's/[^a-zA-Z0-9._-]/_/g'
+    echo "$1" | sed 's/[^a-zA-Z0-9.-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//'
+}
+
+# Map Russian category names to English folder names
+map_group_name() {
+    local group="$1"
+    case "$group" in
+        *"Интерфейс"*) echo "interface" ;;
+        *"Управление"*) echo "management" ;;
+        *"Онлайн"*) echo "online" ;;
+        *"Торренты"*) echo "torrents" ;;
+        *"ТВ"*|*"TV"*) echo "tv" ;;
+        *"Радио"*) echo "radio" ;;
+        *"18+"*) echo "adult" ;;
+        *) echo "$(sanitize_filename "$group")" ;;
+    esac
 }
 
 # Function to download plugin
@@ -76,8 +91,8 @@ download_plugin() {
     local name="$2"
     local group="$3"
     
-    # Create group directory
-    local group_dir="$LOCAL_DIR/$(sanitize_filename "$group")"
+    # Create group directory with proper English name
+    local group_dir="$LOCAL_DIR/$(map_group_name "$group")"
     mkdir -p "$group_dir"
     
     # Determine filename
