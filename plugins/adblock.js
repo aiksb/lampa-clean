@@ -1,5 +1,5 @@
 /**
- * Lampa Clean - Ad Blocker v1.1
+ * Lampa Clean - Ad Blocker v1.2
  * Provider: Lampa Clean (github.com/aiksb/lampa-clean)
  * 
  * Clean ad blocking without domain locks.
@@ -8,8 +8,7 @@
  * - CSS injection
  * - Fetch interception  
  * - Premium status spoof
- * - Video element proxy
- * - Timer clearing
+ * - DOM observer for ad removal
  * 
  * Blocks:
  * - Pre-roll ads before movies
@@ -21,7 +20,7 @@
 (function () {
     'use strict';
 
-    console.log('[Lampa Clean AdBlock v1.1] Initializing...');
+    console.log('[Lampa Clean AdBlock v1.2] Initializing...');
 
     // ==================== LAMPA SETTINGS OVERRIDES ====================
     // Disable all premium/ad features at the settings level
@@ -65,86 +64,54 @@
     window.lampa_settings.developer.fps = false;
 
     // Force TV platform for better compatibility
-    if (window.Lampa?.Platform?.tv) {
-        Lampa.Platform.tv();
+    try {
+        if (window.Lampa?.Platform?.tv) {
+            Lampa.Platform.tv();
+        }
+    } catch (e) {
+        // Platform API might not be available yet
     }
 
     // ==================== PREMIUM STATUS SPOOF ====================
-    // Fallback method - spoof premium account status (wrapped in try-catch for read-only props)
-    try {
-        window.Account = window.Account || {};
-        Object.defineProperty(window.Account, 'hasPremium', {
-            value: () => true,
-            writable: true,
-            configurable: true
-        });
-    } catch (e) {
-        console.log('[Lampa Clean AdBlock] Account.hasPremium already defined');
-    }
-
-    // Also spoof Lampa.Account if exists
-    try {
-        if (window.Lampa?.Account) {
-            Object.defineProperty(window.Lampa.Account, 'hasPremium', {
-                value: () => true,
-                writable: true,
-                configurable: true
-            });
-        }
-    } catch (e) {
-        console.log('[Lampa Clean AdBlock] Lampa.Account.hasPremium protected');
-    }
-
-    // ==================== VIDEO ELEMENT PROXY ====================
-    // Fallback method from ads.js - intercept video creation for ads
-    const originalCreateElement = document.createElement.bind(document);
-    document.createElement = new Proxy(originalCreateElement, {
-        apply(target, thisArg, args) {
-            const element = target.apply(thisArg, args);
-
-            if (args[0] === 'video') {
-                // Flag to track if this is an ad video
-                let isAdVideo = false;
-
-                // Override play to detect and block ad videos
-                const originalPlay = element.play.bind(element);
-                element.play = function () {
-                    // Check if this might be an ad video by looking at src
-                    const src = element.src || element.currentSrc || '';
-                    if (src.includes('ad') || src.includes('preroll') || src.includes('commercial')) {
-                        console.log('[Lampa Clean AdBlock] Blocking ad video play:', src);
-                        isAdVideo = true;
-
-                        // Simulate video end to skip ad
-                        setTimeout(() => {
-                            element.dispatchEvent(new Event('ended'));
-                        }, 100);
-
-                        return Promise.resolve();
-                    }
-
-                    return originalPlay();
-                };
+    // Spoof premium account status (wrapped in try-catch for read-only props)
+    function spoofPremium() {
+        try {
+            window.Account = window.Account || {};
+            if (!Object.getOwnPropertyDescriptor(window.Account, 'hasPremium')?.configurable === false) {
+                Object.defineProperty(window.Account, 'hasPremium', {
+                    value: function () { return true; },
+                    writable: true,
+                    configurable: true
+                });
             }
-
-            return element;
+        } catch (e) {
+            // Property already defined and not configurable
         }
-    });
 
-    // ==================== AD TIMER CLEARING ====================
-    // Fallback method from ads.js - clear ad-related timers
-    function clearAdTimers() {
-        console.log('[Lampa Clean AdBlock] Clearing potential ad timers...');
-        const highestId = setTimeout(() => { }, 0);
-        // Only clear a reasonable range to avoid breaking app functionality
-        const startId = Math.max(0, highestId - 50);
-        for (let i = startId; i <= highestId; i++) {
-            clearTimeout(i);
+        // Also spoof Lampa.Account if exists
+        try {
+            if (window.Lampa?.Account) {
+                const descriptor = Object.getOwnPropertyDescriptor(window.Lampa.Account, 'hasPremium');
+                if (!descriptor || descriptor.configurable !== false) {
+                    Object.defineProperty(window.Lampa.Account, 'hasPremium', {
+                        value: function () { return true; },
+                        writable: true,
+                        configurable: true
+                    });
+                }
+            }
+        } catch (e) {
+            // Property protected
         }
     }
+
+    spoofPremium();
 
     // ==================== CSS INJECTION ====================
     function injectAdBlockCSS() {
+        // Check if already injected
+        if (document.getElementById('lampa-clean-adblock')) return;
+
         const css = `
             /* Hide ad-related elements */
             .ad-server,
@@ -168,10 +135,9 @@
                 display: none !important;
             }
             
-            /* Hide CUB Premium related text */
+            /* Hide CUB Premium related elements */
             .selector-cub,
-            .premium-text,
-            div:has(> span:contains("CUB Premium")) {
+            .premium-text {
                 display: none !important;
             }
         `;
@@ -179,7 +145,15 @@
         const style = document.createElement('style');
         style.id = 'lampa-clean-adblock';
         style.textContent = css;
-        document.head.appendChild(style);
+
+        if (document.head) {
+            document.head.appendChild(style);
+        } else {
+            // Wait for head to be available
+            document.addEventListener('DOMContentLoaded', function () {
+                document.head.appendChild(style);
+            });
+        }
     }
 
     // ==================== AD REMOVAL FUNCTIONS ====================
@@ -199,8 +173,14 @@
             '[data-action="timetable"]'
         ];
 
-        adSelectors.forEach(selector => {
-            document.querySelectorAll(selector).forEach(el => el.remove());
+        adSelectors.forEach(function (selector) {
+            try {
+                document.querySelectorAll(selector).forEach(function (el) {
+                    el.remove();
+                });
+            } catch (e) {
+                // Selector might be invalid in some environments
+            }
         });
     }
 
@@ -213,73 +193,103 @@
             '[data-name="card_interfice_reactions"]'
         ];
 
-        cubSelectors.forEach(selector => {
-            document.querySelectorAll(selector).forEach(el => el.remove());
+        cubSelectors.forEach(function (selector) {
+            try {
+                document.querySelectorAll(selector).forEach(function (el) {
+                    el.remove();
+                });
+            } catch (e) {
+                // Ignore
+            }
         });
 
         // Remove "CUB Premium" text items
-        document.querySelectorAll('.settings-param').forEach(el => {
-            if (el.textContent.includes('CUB Premium') ||
-                el.textContent.includes('CUB Premi')) {
-                el.remove();
-            }
-        });
+        try {
+            document.querySelectorAll('.settings-param').forEach(function (el) {
+                if (el.textContent &&
+                    (el.textContent.includes('CUB Premium') ||
+                        el.textContent.includes('CUB Premi'))) {
+                    el.remove();
+                }
+            });
+        } catch (e) {
+            // Ignore
+        }
     }
 
     // ==================== VIDEO AD BLOCKING ====================
     function blockVideoAds() {
         // Override the ad display function if it exists
-        if (window.Lampa?.Ad) {
-            window.Lampa.Ad = {
-                show: function () { return Promise.resolve(); },
-                load: function () { return Promise.resolve(); },
-                isReady: function () { return false; },
-                destroy: function () { }
-            };
+        try {
+            if (window.Lampa?.Ad) {
+                window.Lampa.Ad = {
+                    show: function () { return Promise.resolve(); },
+                    load: function () { return Promise.resolve(); },
+                    isReady: function () { return false; },
+                    destroy: function () { }
+                };
+            }
+        } catch (e) {
+            // Lampa.Ad might be protected
         }
 
-        // Block common ad video sources
-        const originalFetch = window.fetch;
-        window.fetch = function (url, options) {
-            if (typeof url === 'string') {
-                // Block known ad domains
-                const adDomains = [
-                    'googleads',
-                    'doubleclick',
-                    'googlesyndication',
-                    'adservice',
-                    'pagead',
-                    'ads.google',
-                    'yandex.ru/ads',
-                    'mc.yandex',
-                    'an.yandex'
-                ];
+        // Block common ad video sources via fetch
+        if (typeof window.fetch === 'function' && !window._adblockFetchPatched) {
+            window._adblockFetchPatched = true;
+            const originalFetch = window.fetch;
 
-                const isAd = adDomains.some(domain => url.includes(domain));
-                if (isAd) {
-                    console.log('[Lampa Clean AdBlock] Blocked ad request:', url);
-                    return Promise.reject(new Error('Blocked by AdBlock'));
+            window.fetch = function (url, options) {
+                if (typeof url === 'string') {
+                    // Block known ad domains (use exact domain matching to avoid false positives)
+                    const adDomains = [
+                        'googleads.g.doubleclick.net',
+                        'pagead2.googlesyndication.com',
+                        'adservice.google.com',
+                        'www.googleadservices.com',
+                        'an.yandex.ru',
+                        'mc.yandex.ru',
+                        'yandex.ru/ads'
+                    ];
+
+                    const isAd = adDomains.some(function (domain) {
+                        return url.includes(domain);
+                    });
+
+                    if (isAd) {
+                        console.log('[Lampa Clean AdBlock] Blocked ad request:', url);
+                        return Promise.reject(new Error('Blocked by AdBlock'));
+                    }
                 }
-            }
-            return originalFetch.call(this, url, options);
-        };
+                return originalFetch.call(this, url, options);
+            };
+        }
     }
 
     // ==================== PREROLL AD BLOCKING ====================
+    var adObserver = null;
+
     function blockPrerollAds() {
+        // Only observe once
+        if (adObserver) return;
+
+        // Wait for body to be available
+        if (!document.body) {
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', blockPrerollAds);
+            } else {
+                setTimeout(blockPrerollAds, 100);
+            }
+            return;
+        }
+
         // Monitor for ad overlay elements
-        const observer = new MutationObserver(function (mutations) {
+        adObserver = new MutationObserver(function (mutations) {
+            var shouldClean = false;
+
             mutations.forEach(function (mutation) {
-                if (mutation.type === 'childList') {
-                    // Check for ad-related elements
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
                     mutation.addedNodes.forEach(function (node) {
                         if (node.nodeType === 1) {
-                            // Check for "Реклама" text
-                            if (node.textContent && node.textContent.includes('Реклама')) {
-                                console.log('[Lampa Clean AdBlock] Removing ad element');
-                                node.remove();
-                            }
-
                             // Check for ad classes
                             if (node.classList && (
                                 node.classList.contains('ad-server') ||
@@ -287,17 +297,29 @@
                                 node.classList.contains('preroll')
                             )) {
                                 node.remove();
+                                shouldClean = true;
+                            }
+
+                            // Check for "Реклама" text in specific ad containers
+                            if (node.className && typeof node.className === 'string' &&
+                                node.className.includes('ad-')) {
+                                if (node.textContent && node.textContent.includes('Реклама')) {
+                                    node.remove();
+                                    shouldClean = true;
+                                }
                             }
                         }
                     });
                 }
             });
 
-            // Periodic cleanup
-            removeAds();
+            // Run cleanup if ads were detected
+            if (shouldClean) {
+                removeAds();
+            }
         });
 
-        observer.observe(document.body, {
+        adObserver.observe(document.body, {
             childList: true,
             subtree: true
         });
@@ -306,85 +328,115 @@
     // ==================== EVENT LISTENERS ====================
     function setupEventListeners() {
         if (!window.Lampa?.Listener) {
-            setTimeout(setupEventListeners, 100);
+            setTimeout(setupEventListeners, 200);
             return;
         }
 
-        // On settings open - remove CUB items
-        Lampa.Settings?.listener?.follow('open', function (event) {
-            setTimeout(removeSettingsAds, 50);
+        // Re-run premium spoof after Lampa is ready
+        spoofPremium();
 
-            if (event.name === 'server') {
-                // Remove ad-server from server settings
-                document.querySelector('.ad-server')?.remove();
+        // On settings open - remove CUB items
+        try {
+            if (Lampa.Settings?.listener) {
+                Lampa.Settings.listener.follow('open', function (event) {
+                    setTimeout(removeSettingsAds, 50);
+
+                    if (event && event.name === 'server') {
+                        var adServer = document.querySelector('.ad-server');
+                        if (adServer) adServer.remove();
+                    }
+                });
             }
-        });
+        } catch (e) {
+            // Settings listener not available
+        }
 
         // On activity change
-        Lampa.Controller?.listener?.follow('toggle', function (event) {
-            if (event.name === 'full') {
-                setTimeout(removeAds, 20);
+        try {
+            if (Lampa.Controller?.listener) {
+                Lampa.Controller.listener.follow('toggle', function (event) {
+                    if (event && event.name === 'full') {
+                        setTimeout(removeAds, 20);
+                    }
+                });
             }
-        });
+        } catch (e) {
+            // Controller listener not available
+        }
 
         // On app events
-        Lampa.Listener?.follow('app', function (event) {
-            if (event.type === 'ready') {
-                removeAds();
-                removeSettingsAds();
-            }
+        try {
+            Lampa.Listener.follow('app', function (event) {
+                if (event.type === 'ready') {
+                    removeAds();
+                    removeSettingsAds();
+                    spoofPremium();
+                }
 
-            if (event.type === 'complite' || event.type === 'complete') {
-                setTimeout(removeAds, 100);
-            }
-        });
+                if (event.type === 'complite' || event.type === 'complete') {
+                    setTimeout(removeAds, 100);
+                }
+            });
+        } catch (e) {
+            // Listener not available
+        }
 
         // On activity events
-        Lampa.Listener?.follow('activity', function (event) {
-            if (event.type === 'complite' || event.type === 'complete') {
-                setTimeout(removeAds, 100);
+        try {
+            Lampa.Listener.follow('activity', function (event) {
+                if (event.type === 'complite' || event.type === 'complete') {
+                    setTimeout(removeAds, 100);
 
-                // Remove book/subscribe buttons
-                document.querySelector('.button--book')?.remove();
-                document.querySelector('.button--subscribe')?.remove();
-            }
-        });
+                    // Remove book/subscribe buttons
+                    var bookBtn = document.querySelector('.button--book');
+                    var subBtn = document.querySelector('.button--subscribe');
+                    if (bookBtn) bookBtn.remove();
+                    if (subBtn) subBtn.remove();
+                }
+            });
+        } catch (e) {
+            // Listener not available
+        }
     }
 
     // ==================== INITIALIZATION ====================
     function init() {
+        // Inject CSS first (low risk)
         injectAdBlockCSS();
-        blockVideoAds();
-        blockPrerollAds();
 
-        // Clear potential ad timers on load
-        setTimeout(clearAdTimers, 1000);
+        // Block video ads
+        blockVideoAds();
+
+        // Start DOM observer
+        blockPrerollAds();
 
         if (window.Lampa) {
             setupEventListeners();
             removeAds();
         } else {
             // Wait for Lampa to load
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', function () {
-                    setTimeout(function () {
-                        setupEventListeners();
-                        removeAds();
-                        clearAdTimers();
-                    }, 500);
-                });
-            } else {
-                setTimeout(function () {
+            var checkLampa = function () {
+                if (window.Lampa) {
                     setupEventListeners();
                     removeAds();
-                    clearAdTimers();
-                }, 500);
+                } else {
+                    setTimeout(checkLampa, 300);
+                }
+            };
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function () {
+                    setTimeout(checkLampa, 300);
+                });
+            } else {
+                setTimeout(checkLampa, 300);
             }
         }
 
-        console.log('[Lampa Clean AdBlock v1.1] Initialized - Provider: Lampa Clean');
+        console.log('[Lampa Clean AdBlock v1.2] Initialized - Provider: Lampa Clean');
     }
 
+    // Start initialization
     init();
 
 })();
