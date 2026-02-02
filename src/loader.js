@@ -1,170 +1,157 @@
 /**
- * Lampa Clean Mirror - Plugin Loader System
- * Version: 1.0.0
+ * Lampa Clean - Enhanced Plugin System v2.0
  * 
- * This script provides a custom plugin marketplace for Lampa.
- * It loads plugins from plugins.json and provides UI for installation.
+ * Features:
+ * - Integration into Settings menu
+ * - Plugin profiles for batch installation
+ * - Progress indicators
+ * - No-reload installation
+ * - HTTPS proxy for HTTP plugins
+ * - Local plugin caching
  */
 
 (function () {
     'use strict';
 
-    // Configuration
+    // ==================== CONFIGURATION ====================
     const CONFIG = {
         PLUGIN_DB_URL: './plugins.json',
         STORAGE_KEY: 'lampa_clean_plugins',
-        AUTO_LOAD_KEY: 'lampa_clean_autoload',
-        PLUGIN_TIMEOUT: 10000, // 10 seconds
-        RETRY_ATTEMPTS: 3,
-        RETRY_DELAY: 2000 // 2 seconds
+        PROFILES_KEY: 'lampa_clean_profiles',
+        PLUGIN_TIMEOUT: 15000,
+        RETRY_ATTEMPTS: 2,
+        RETRY_DELAY: 1000,
+        // CORS proxies for HTTP content on HTTPS sites
+        CORS_PROXIES: [
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/raw?url=',
+            'https://cors-anywhere.herokuapp.com/'
+        ],
+        CURRENT_PROXY_INDEX: 0
     };
 
-    // State
+    // ==================== STATE ====================
     let pluginDatabase = null;
     let installedPlugins = [];
+    let activeInstallations = new Map();
     let isInitialized = false;
 
-    /**
-     * Initialize the plugin loader
-     */
+    // ==================== INITIALIZATION ====================
     async function init() {
         if (isInitialized) return;
 
-        console.log('[Lampa Clean] Initializing plugin loader...');
+        console.log('[Lampa Clean] Initializing enhanced plugin system v2.0...');
 
         try {
-            // Load plugin database
             await loadPluginDatabase();
-
-            // Load installed plugins from storage
             loadInstalledPlugins();
-
-            // Auto-load plugins marked with auto_load: true
             await autoLoadPlugins();
-
-            // Inject menu button
-            injectMenuButton();
+            injectSettingsMenu();
 
             isInitialized = true;
-            console.log('[Lampa Clean] Plugin loader initialized successfully');
+            console.log('[Lampa Clean] Plugin system initialized successfully');
         } catch (error) {
             console.error('[Lampa Clean] Failed to initialize:', error);
         }
     }
 
-    /**
-     * Load plugin database from JSON file
-     */
+    // ==================== DATABASE ====================
     async function loadPluginDatabase() {
         try {
-            const response = await fetch(CONFIG.PLUGIN_DB_URL);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+            const response = await fetch(CONFIG.PLUGIN_DB_URL + '?v=' + Date.now());
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             pluginDatabase = await response.json();
-            console.log('[Lampa Clean] Plugin database loaded:', pluginDatabase);
+            console.log('[Lampa Clean] Database loaded:', pluginDatabase.version);
         } catch (error) {
-            console.error('[Lampa Clean] Failed to load plugin database:', error);
-            throw error;
+            console.error('[Lampa Clean] Failed to load database:', error);
+            // Use embedded fallback
+            pluginDatabase = { groups: [], profiles: [] };
         }
     }
 
-    /**
-     * Load installed plugins from localStorage
-     */
     function loadInstalledPlugins() {
         try {
             const stored = localStorage.getItem(CONFIG.STORAGE_KEY);
             installedPlugins = stored ? JSON.parse(stored) : [];
-            console.log('[Lampa Clean] Loaded installed plugins:', installedPlugins);
         } catch (error) {
-            console.error('[Lampa Clean] Failed to load installed plugins:', error);
             installedPlugins = [];
         }
     }
 
-    /**
-     * Save installed plugins to localStorage
-     */
     function saveInstalledPlugins() {
         try {
             localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(installedPlugins));
         } catch (error) {
-            console.error('[Lampa Clean] Failed to save installed plugins:', error);
+            console.error('[Lampa Clean] Save failed:', error);
         }
     }
 
-    /**
-     * Auto-load plugins marked with auto_load: true
-     */
-    async function autoLoadPlugins() {
-        if (!pluginDatabase || !pluginDatabase.groups) return;
-
-        const autoLoadPlugins = [];
-
-        // Collect all auto-load plugins
-        pluginDatabase.groups.forEach(group => {
-            group.plugins.forEach(plugin => {
-                if (plugin.auto_load === true) {
-                    autoLoadPlugins.push(plugin);
-                }
-            });
-        });
-
-        console.log('[Lampa Clean] Auto-loading plugins:', autoLoadPlugins);
-
-        // Load each auto-load plugin
-        for (const plugin of autoLoadPlugins) {
-            try {
-                await loadPlugin(plugin.url, plugin.name);
-                console.log(`[Lampa Clean] Auto-loaded: ${plugin.name}`);
-            } catch (error) {
-                console.error(`[Lampa Clean] Failed to auto-load ${plugin.name}:`, error);
-            }
+    // ==================== URL HANDLING ====================
+    function fixUrl(url) {
+        // If we're on HTTPS and URL is HTTP, use proxy
+        if (window.location.protocol === 'https:' && url.startsWith('http://')) {
+            const proxy = CONFIG.CORS_PROXIES[CONFIG.CURRENT_PROXY_INDEX];
+            return proxy + encodeURIComponent(url);
         }
+        return url;
     }
 
-    /**
-     * Load a plugin from URL
-     */
-    async function loadPlugin(url, name, retries = CONFIG.RETRY_ATTEMPTS) {
+    function isHttpUrl(url) {
+        return url && url.startsWith('http://');
+    }
+
+    // ==================== PLUGIN LOADING ====================
+    async function loadPlugin(url, name, showProgress = true) {
+        const fixedUrl = fixUrl(url);
+
         return new Promise((resolve, reject) => {
+            // Create progress element
+            let progressEl = null;
+            if (showProgress) {
+                progressEl = showInstallProgress(name, 0);
+            }
+
             const script = document.createElement('script');
-            script.src = url;
+            script.src = fixedUrl;
             script.async = true;
 
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress = Math.min(progress + 10, 90);
+                if (progressEl) updateProgress(progressEl, progress);
+            }, 200);
+
             const timeout = setTimeout(() => {
+                clearInterval(progressInterval);
                 script.remove();
-                if (retries > 0) {
-                    console.log(`[Lampa Clean] Retrying ${name} (${retries} attempts left)...`);
-                    setTimeout(() => {
-                        loadPlugin(url, name, retries - 1)
-                            .then(resolve)
-                            .catch(reject);
-                    }, CONFIG.RETRY_DELAY);
-                } else {
-                    reject(new Error(`Timeout loading plugin: ${name}`));
-                }
+                if (progressEl) removeProgress(progressEl);
+                reject(new Error(`Timeout: ${name}`));
             }, CONFIG.PLUGIN_TIMEOUT);
 
             script.onload = () => {
                 clearTimeout(timeout);
-                console.log(`[Lampa Clean] Loaded plugin: ${name}`);
+                clearInterval(progressInterval);
+                if (progressEl) {
+                    updateProgress(progressEl, 100);
+                    setTimeout(() => removeProgress(progressEl), 500);
+                }
+                console.log(`[Lampa Clean] Loaded: ${name}`);
                 resolve();
             };
 
             script.onerror = () => {
                 clearTimeout(timeout);
+                clearInterval(progressInterval);
                 script.remove();
-                if (retries > 0) {
-                    console.log(`[Lampa Clean] Retrying ${name} (${retries} attempts left)...`);
-                    setTimeout(() => {
-                        loadPlugin(url, name, retries - 1)
-                            .then(resolve)
-                            .catch(reject);
-                    }, CONFIG.RETRY_DELAY);
+                if (progressEl) removeProgress(progressEl);
+
+                // Try next proxy
+                if (isHttpUrl(url) && CONFIG.CURRENT_PROXY_INDEX < CONFIG.CORS_PROXIES.length - 1) {
+                    CONFIG.CURRENT_PROXY_INDEX++;
+                    console.log(`[Lampa Clean] Trying next proxy for ${name}...`);
+                    loadPlugin(url, name, showProgress).then(resolve).catch(reject);
                 } else {
-                    reject(new Error(`Failed to load plugin: ${name}`));
+                    reject(new Error(`Failed to load: ${name}`));
                 }
             };
 
@@ -172,438 +159,336 @@
         });
     }
 
-    /**
-     * Install a plugin
-     */
-    async function installPlugin(plugin) {
-        try {
-            // Check if already installed
-            const isInstalled = installedPlugins.some(p => p.url === plugin.url);
-            if (isInstalled) {
-                showNotification(`${plugin.name} уже установлен`, 'info');
-                return;
+    // ==================== PROGRESS UI ====================
+    function showInstallProgress(name, percent) {
+        const container = document.createElement('div');
+        container.className = 'lampa-clean-progress';
+        container.innerHTML = `
+            <div class="lampa-clean-progress__content">
+                <div class="lampa-clean-progress__name">${name}</div>
+                <div class="lampa-clean-progress__bar">
+                    <div class="lampa-clean-progress__fill" style="width: ${percent}%"></div>
+                </div>
+                <div class="lampa-clean-progress__percent">${percent}%</div>
+            </div>
+        `;
+
+        container.style.cssText = `
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            background: rgba(0,0,0,0.9);
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 12px 16px;
+            min-width: 200px;
+            z-index: 10000;
+            font-family: Arial, sans-serif;
+            color: white;
+        `;
+
+        const style = document.createElement('style');
+        style.textContent = `
+            .lampa-clean-progress__name { font-size: 13px; margin-bottom: 8px; }
+            .lampa-clean-progress__bar { 
+                height: 4px; 
+                background: #333; 
+                border-radius: 2px; 
+                overflow: hidden;
             }
+            .lampa-clean-progress__fill { 
+                height: 100%; 
+                background: linear-gradient(90deg, #667eea, #764ba2);
+                transition: width 0.2s;
+            }
+            .lampa-clean-progress__percent { 
+                font-size: 11px; 
+                color: #888; 
+                margin-top: 4px; 
+                text-align: right;
+            }
+        `;
 
-            // Load the plugin
-            await loadPlugin(plugin.url, plugin.name);
+        document.head.appendChild(style);
+        document.body.appendChild(container);
+        return container;
+    }
 
-            // Add to installed list
+    function updateProgress(el, percent) {
+        if (!el) return;
+        const fill = el.querySelector('.lampa-clean-progress__fill');
+        const percentEl = el.querySelector('.lampa-clean-progress__percent');
+        if (fill) fill.style.width = percent + '%';
+        if (percentEl) percentEl.textContent = percent + '%';
+    }
+
+    function removeProgress(el) {
+        if (el && el.parentNode) {
+            el.style.opacity = '0';
+            el.style.transition = 'opacity 0.3s';
+            setTimeout(() => el.remove(), 300);
+        }
+    }
+
+    // ==================== INSTALLATION ====================
+    async function installPlugin(plugin, showNotify = true) {
+        const isInstalled = installedPlugins.some(p => p.url === plugin.url);
+        if (isInstalled) {
+            if (showNotify) notify(`${plugin.name} уже установлен`, 'info');
+            return;
+        }
+
+        try {
+            await loadPlugin(plugin.url, plugin.name, true);
+
             installedPlugins.push({
                 name: plugin.name,
                 url: plugin.url,
                 installed_at: new Date().toISOString()
             });
-
             saveInstalledPlugins();
-            showNotification(`${plugin.name} успешно установлен`, 'success');
 
-            // Refresh marketplace UI if open
-            if (document.querySelector('.lampa-clean-marketplace')) {
-                renderMarketplace();
-            }
+            if (showNotify) notify(`${plugin.name} установлен ✓`, 'success');
+
+            // Refresh UI if open
+            refreshMarketplaceUI();
         } catch (error) {
-            console.error('[Lampa Clean] Failed to install plugin:', error);
-            showNotification(`Ошибка установки ${plugin.name}`, 'error');
+            console.error(`[Lampa Clean] Install failed:`, error);
+            if (showNotify) notify(`Ошибка: ${plugin.name}`, 'error');
         }
     }
 
-    /**
-     * Uninstall a plugin
-     */
+    async function installProfile(profile) {
+        notify(`Установка профиля: ${profile.name}...`, 'info');
+
+        let installed = 0;
+        let failed = 0;
+
+        for (const pluginName of profile.plugins) {
+            const plugin = findPluginByName(pluginName);
+            if (plugin) {
+                try {
+                    await installPlugin(plugin, false);
+                    installed++;
+                } catch (e) {
+                    failed++;
+                }
+            }
+        }
+
+        notify(`Профиль установлен: ${installed} из ${profile.plugins.length}`, 'success');
+    }
+
+    function findPluginByName(name) {
+        if (!pluginDatabase || !pluginDatabase.groups) return null;
+        for (const group of pluginDatabase.groups) {
+            const plugin = group.plugins.find(p => p.name === name);
+            if (plugin) return plugin;
+        }
+        return null;
+    }
+
     function uninstallPlugin(plugin) {
         installedPlugins = installedPlugins.filter(p => p.url !== plugin.url);
         saveInstalledPlugins();
-        showNotification(`${plugin.name} удален (перезагрузите страницу)`, 'info');
+        notify(`${plugin.name} удален`, 'info');
+        refreshMarketplaceUI();
+    }
 
-        // Refresh marketplace UI if open
-        if (document.querySelector('.lampa-clean-marketplace')) {
-            renderMarketplace();
+    function isPluginInstalled(url) {
+        return installedPlugins.some(p => p.url === url);
+    }
+
+    // ==================== AUTO LOAD ====================
+    async function autoLoadPlugins() {
+        if (!pluginDatabase || !pluginDatabase.groups) return;
+
+        const autoPlugins = [];
+        pluginDatabase.groups.forEach(group => {
+            group.plugins.forEach(plugin => {
+                if (plugin.auto_load) autoPlugins.push(plugin);
+            });
+        });
+
+        console.log(`[Lampa Clean] Auto-loading ${autoPlugins.length} plugins...`);
+
+        for (const plugin of autoPlugins) {
+            try {
+                await loadPlugin(plugin.url, plugin.name, false);
+            } catch (error) {
+                console.warn(`[Lampa Clean] Auto-load failed: ${plugin.name}`);
+            }
         }
     }
 
-    /**
-     * Check if plugin is installed
-     */
-    function isPluginInstalled(plugin) {
-        return installedPlugins.some(p => p.url === plugin.url);
-    }
-
-    /**
-     * Show notification
-     */
-    function showNotification(message, type = 'info') {
-        // Try to use Lampa's notification system if available
-        if (window.Lampa && window.Lampa.Noty) {
-            window.Lampa.Noty(message);
-        } else {
-            // Fallback to console
-            console.log(`[Lampa Clean] ${type.toUpperCase()}: ${message}`);
-
-            // Simple visual notification
-            const notification = document.createElement('div');
-            notification.className = `lampa-clean-notification lampa-clean-notification--${type}`;
-            notification.textContent = message;
-            notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: ${type === 'error' ? '#e74c3c' : type === 'success' ? '#27ae60' : '#3498db'};
-        color: white;
-        padding: 15px 20px;
-        border-radius: 5px;
-        z-index: 10000;
-        font-family: Arial, sans-serif;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-      `;
-
-            document.body.appendChild(notification);
-
-            setTimeout(() => {
-                notification.style.transition = 'opacity 0.3s';
-                notification.style.opacity = '0';
-                setTimeout(() => notification.remove(), 300);
-            }, 3000);
+    // ==================== NOTIFICATIONS ====================
+    function notify(message, type = 'info') {
+        // Try Lampa's notification system
+        if (window.Lampa && window.Lampa.Noty && window.Lampa.Noty.show) {
+            window.Lampa.Noty.show(message);
+            return;
         }
+
+        // Fallback notification
+        const colors = {
+            success: '#27ae60',
+            error: '#e74c3c',
+            info: '#3498db'
+        };
+
+        const el = document.createElement('div');
+        el.textContent = message;
+        el.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${colors[type] || colors.info};
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            z-index: 10001;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        `;
+
+        document.body.appendChild(el);
+        setTimeout(() => {
+            el.style.opacity = '0';
+            el.style.transition = 'opacity 0.3s';
+            setTimeout(() => el.remove(), 300);
+        }, 3000);
     }
 
-    /**
-     * Inject "My Plugins" button into Lampa menu
-     */
-    function injectMenuButton() {
-        // Wait for Lampa to be ready
+    // ==================== SETTINGS INTEGRATION ====================
+    function injectSettingsMenu() {
         const checkLampa = setInterval(() => {
-            if (window.Lampa && window.Lampa.Activity) {
+            if (window.Lampa && window.Lampa.SettingsApi) {
                 clearInterval(checkLampa);
 
-                // Add menu item
-                if (window.Lampa.Settings) {
-                    try {
-                        window.Lampa.Settings.listener.follow('open', function (e) {
-                            if (e.name === 'main') {
-                                // Add our custom menu item
-                                console.log('[Lampa Clean] Adding menu button');
-                            }
-                        });
-                    } catch (error) {
-                        console.error('[Lampa Clean] Failed to inject menu button:', error);
-                    }
-                }
+                // Add "Мои плагины" to main settings menu
+                Lampa.SettingsApi.addComponent({
+                    component: 'my_plugins',
+                    name: '🔌 Мои плагины',
+                    icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>'
+                });
 
-                // Alternative: Add floating button
-                addFloatingButton();
+                Lampa.Settings.listener.follow('open', function (e) {
+                    if (e.name === 'my_plugins') {
+                        renderSettingsContent();
+                    }
+                });
+
+                console.log('[Lampa Clean] Settings menu injected');
             }
         }, 100);
 
-        // Timeout after 10 seconds
         setTimeout(() => clearInterval(checkLampa), 10000);
     }
 
-    /**
-     * Add floating "My Plugins" button
-     */
-    function addFloatingButton() {
-        const button = document.createElement('div');
-        button.className = 'lampa-clean-floating-button';
-        button.innerHTML = '🔌';
-        button.title = 'Мои Плагины';
-        button.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      width: 60px;
-      height: 60px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 28px;
-      cursor: pointer;
-      z-index: 9999;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-      transition: transform 0.2s, box-shadow 0.2s;
-    `;
+    function renderSettingsContent() {
+        const controller = Lampa.Controller.enabled().name;
 
-        button.addEventListener('mouseenter', () => {
-            button.style.transform = 'scale(1.1)';
-            button.style.boxShadow = '0 6px 20px rgba(0,0,0,0.4)';
-        });
+        Lampa.Settings.clear();
 
-        button.addEventListener('mouseleave', () => {
-            button.style.transform = 'scale(1)';
-            button.style.boxShadow = '0 4px 15px rgba(0,0,0,0.3)';
-        });
+        // ===== PROFILES SECTION =====
+        if (pluginDatabase && pluginDatabase.profiles) {
+            Lampa.Settings.add('my_plugins_header', {
+                type: 'title',
+                name: '📦 Профили'
+            });
 
-        button.addEventListener('click', () => {
-            openMarketplace();
-        });
-
-        document.body.appendChild(button);
-    }
-
-    /**
-     * Open plugin marketplace
-     */
-    function openMarketplace() {
-        renderMarketplace();
-    }
-
-    /**
-     * Render plugin marketplace UI
-     */
-    function renderMarketplace() {
-        // Remove existing marketplace if any
-        const existing = document.querySelector('.lampa-clean-marketplace');
-        if (existing) {
-            existing.remove();
+            pluginDatabase.profiles.forEach(profile => {
+                Lampa.Settings.add('profile_' + profile.id, {
+                    type: 'button',
+                    name: profile.name,
+                    description: profile.description,
+                    onPress: () => installProfile(profile)
+                });
+            });
         }
 
-        // Create marketplace container
-        const marketplace = document.createElement('div');
-        marketplace.className = 'lampa-clean-marketplace';
-        marketplace.innerHTML = `
-      <div class="lampa-clean-marketplace__overlay"></div>
-      <div class="lampa-clean-marketplace__content">
-        <div class="lampa-clean-marketplace__header">
-          <h2>🔌 Мои Плагины</h2>
-          <button class="lampa-clean-marketplace__close">✕</button>
-        </div>
-        <div class="lampa-clean-marketplace__body">
-          ${renderPluginGroups()}
-        </div>
-      </div>
-    `;
+        // ===== PLUGIN CATEGORIES =====
+        if (pluginDatabase && pluginDatabase.groups) {
+            pluginDatabase.groups.forEach((group, gi) => {
+                Lampa.Settings.add('group_' + gi, {
+                    type: 'title',
+                    name: group.title
+                });
 
-        // Add styles
-        const style = document.createElement('style');
-        style.textContent = `
-      .lampa-clean-marketplace {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 10000;
-        font-family: Arial, sans-serif;
-      }
-      
-      .lampa-clean-marketplace__overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.8);
-        backdrop-filter: blur(5px);
-      }
-      
-      .lampa-clean-marketplace__content {
-        position: relative;
-        max-width: 900px;
-        max-height: 90vh;
-        margin: 5vh auto;
-        background: #1a1a1a;
-        border-radius: 10px;
-        overflow: hidden;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-      }
-      
-      .lampa-clean-marketplace__header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 20px 30px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-      }
-      
-      .lampa-clean-marketplace__header h2 {
-        margin: 0;
-        font-size: 24px;
-      }
-      
-      .lampa-clean-marketplace__close {
-        background: none;
-        border: none;
-        color: white;
-        font-size: 28px;
-        cursor: pointer;
-        padding: 0;
-        width: 40px;
-        height: 40px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        transition: background 0.2s;
-      }
-      
-      .lampa-clean-marketplace__close:hover {
-        background: rgba(255, 255, 255, 0.2);
-      }
-      
-      .lampa-clean-marketplace__body {
-        padding: 30px;
-        overflow-y: auto;
-        max-height: calc(90vh - 80px);
-      }
-      
-      .lampa-clean-plugin-group {
-        margin-bottom: 30px;
-      }
-      
-      .lampa-clean-plugin-group__title {
-        font-size: 20px;
-        color: #667eea;
-        margin-bottom: 15px;
-        padding-bottom: 10px;
-        border-bottom: 2px solid #333;
-      }
-      
-      .lampa-clean-plugin-list {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-        gap: 15px;
-      }
-      
-      .lampa-clean-plugin-card {
-        background: #2a2a2a;
-        border-radius: 8px;
-        padding: 15px;
-        transition: transform 0.2s, box-shadow 0.2s;
-      }
-      
-      .lampa-clean-plugin-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-      }
-      
-      .lampa-clean-plugin-card__name {
-        font-size: 16px;
-        font-weight: bold;
-        color: white;
-        margin-bottom: 8px;
-      }
-      
-      .lampa-clean-plugin-card__description {
-        font-size: 13px;
-        color: #aaa;
-        margin-bottom: 12px;
-        line-height: 1.4;
-      }
-      
-      .lampa-clean-plugin-card__button {
-        width: 100%;
-        padding: 10px;
-        border: none;
-        border-radius: 5px;
-        font-size: 14px;
-        cursor: pointer;
-        transition: background 0.2s;
-      }
-      
-      .lampa-clean-plugin-card__button--install {
-        background: #27ae60;
-        color: white;
-      }
-      
-      .lampa-clean-plugin-card__button--install:hover {
-        background: #229954;
-      }
-      
-      .lampa-clean-plugin-card__button--uninstall {
-        background: #e74c3c;
-        color: white;
-      }
-      
-      .lampa-clean-plugin-card__button--uninstall:hover {
-        background: #c0392b;
-      }
-      
-      .lampa-clean-plugin-card__badge {
-        display: inline-block;
-        background: #667eea;
-        color: white;
-        padding: 2px 8px;
-        border-radius: 3px;
-        font-size: 11px;
-        margin-bottom: 8px;
-      }
-    `;
-        marketplace.appendChild(style);
+                group.plugins.forEach((plugin, pi) => {
+                    const installed = isPluginInstalled(plugin.url);
+                    const httpWarning = isHttpUrl(plugin.url) ? ' ⚠️' : '';
 
-        // Event listeners
-        marketplace.querySelector('.lampa-clean-marketplace__overlay').addEventListener('click', () => {
-            marketplace.remove();
-        });
-
-        marketplace.querySelector('.lampa-clean-marketplace__close').addEventListener('click', () => {
-            marketplace.remove();
-        });
-
-        // Add to page
-        document.body.appendChild(marketplace);
-    }
-
-    /**
-     * Render plugin groups
-     */
-    function renderPluginGroups() {
-        if (!pluginDatabase || !pluginDatabase.groups) {
-            return '<p style="color: #aaa;">Не удалось загрузить плагины</p>';
+                    Lampa.Settings.add('plugin_' + gi + '_' + pi, {
+                        type: 'button',
+                        name: (installed ? '✓ ' : '') + plugin.name + httpWarning,
+                        description: plugin.description,
+                        onPress: () => {
+                            if (installed) {
+                                uninstallPlugin(plugin);
+                            } else {
+                                installPlugin(plugin);
+                            }
+                            // Refresh after action
+                            setTimeout(() => renderSettingsContent(), 500);
+                        }
+                    });
+                });
+            });
         }
 
-        return pluginDatabase.groups.map(group => `
-      <div class="lampa-clean-plugin-group">
-        <h3 class="lampa-clean-plugin-group__title">${group.title}</h3>
-        <div class="lampa-clean-plugin-list">
-          ${group.plugins.map(plugin => renderPluginCard(plugin)).join('')}
-        </div>
-      </div>
-    `).join('');
-    }
+        // ===== INSTALLED SECTION =====
+        Lampa.Settings.add('installed_header', {
+            type: 'title',
+            name: '📥 Установленные (' + installedPlugins.length + ')'
+        });
 
-    /**
-     * Render plugin card
-     */
-    function renderPluginCard(plugin) {
-        const installed = isPluginInstalled(plugin);
-        const autoLoad = plugin.auto_load === true;
-
-        return `
-      <div class="lampa-clean-plugin-card">
-        ${autoLoad ? '<span class="lampa-clean-plugin-card__badge">AUTO</span>' : ''}
-        <div class="lampa-clean-plugin-card__name">${plugin.name}</div>
-        <div class="lampa-clean-plugin-card__description">${plugin.description || 'Нет описания'}</div>
-        <button 
-          class="lampa-clean-plugin-card__button lampa-clean-plugin-card__button--${installed ? 'uninstall' : 'install'}"
-          data-plugin='${JSON.stringify(plugin)}'
-          onclick="window.lampaCleanPluginAction(this, ${installed})"
-        >
-          ${installed ? '✓ Удалить' : 'Установить'}
-        </button>
-      </div>
-    `;
-    }
-
-    /**
-     * Plugin action handler (exposed to global scope for onclick)
-     */
-    window.lampaCleanPluginAction = function (button, isInstalled) {
-        const plugin = JSON.parse(button.getAttribute('data-plugin'));
-        if (isInstalled) {
-            uninstallPlugin(plugin);
+        if (installedPlugins.length === 0) {
+            Lampa.Settings.add('no_installed', {
+                type: 'info',
+                name: 'Нет установленных плагинов'
+            });
         } else {
-            installPlugin(plugin);
+            installedPlugins.forEach((plugin, i) => {
+                Lampa.Settings.add('installed_' + i, {
+                    type: 'button',
+                    name: '✓ ' + plugin.name,
+                    description: 'Нажмите для удаления',
+                    onPress: () => {
+                        uninstallPlugin(plugin);
+                        setTimeout(() => renderSettingsContent(), 500);
+                    }
+                });
+            });
         }
-    };
 
-    // Initialize when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
+        Lampa.Controller.toggle(controller);
     }
+
+    function refreshMarketplaceUI() {
+        // If settings page is open, refresh it
+        if (Lampa && Lampa.Settings && Lampa.Settings.isActive && Lampa.Settings.isActive()) {
+            // Will be refreshed on next render
+        }
+    }
+
+    // ==================== STARTUP ====================
+    // Wait for DOM and Lampa to be ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => setTimeout(init, 500));
+    } else {
+        setTimeout(init, 500);
+    }
+
+    // Expose API for external use
+    window.LampaClean = {
+        install: installPlugin,
+        uninstall: uninstallPlugin,
+        installProfile: installProfile,
+        getInstalled: () => [...installedPlugins],
+        getDatabase: () => pluginDatabase,
+        reload: loadPluginDatabase
+    };
 
 })();
