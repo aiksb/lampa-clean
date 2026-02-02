@@ -1,10 +1,13 @@
 #!/bin/bash
 
 # ============================================================
-# Lampa Clean - Plugin Grabber Script
+# Lampa Clean - Plugin Grabber Script v2.0
 # 
-# Downloads all plugins from plugins.json to local storage
-# and updates URLs to point to local copies.
+# Features:
+# - Downloads all plugins from plugins.json to local storage
+# - Proxy fallback if direct download fails
+# - Detailed statistics
+# - Backup before update
 # ============================================================
 
 set -e
@@ -16,16 +19,42 @@ PLUGINS_JSON="$PROJECT_DIR/plugins.json"
 LOCAL_DIR="$PROJECT_DIR/plugins/local"
 LOCAL_JSON="$PROJECT_DIR/plugins_local.json"
 
+# Proxy configuration (format: ip:port:user:pass)
+PROXY="${1:-}"
+PROXY_URL=""
+
+if [[ -n "$PROXY" ]]; then
+    IFS=':' read -r PROXY_IP PROXY_PORT PROXY_USER PROXY_PASS <<< "$PROXY"
+    if [[ -n "$PROXY_USER" && -n "$PROXY_PASS" ]]; then
+        PROXY_URL="http://${PROXY_USER}:${PROXY_PASS}@${PROXY_IP}:${PROXY_PORT}"
+    else
+        PROXY_URL="http://${PROXY_IP}:${PROXY_PORT}"
+    fi
+fi
+
+# CORS Proxy fallback
+CORS_PROXY="https://corsproxy.io/?"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m'
 
-echo -e "${BLUE}╔════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║    Lampa Clean - Plugin Grabber v1.0       ║${NC}"
-echo -e "${BLUE}╚════════════════════════════════════════════╝${NC}"
+echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║      Lampa Clean - Plugin Grabber v2.0                 ║${NC}"
+echo -e "${BLUE}║      With Proxy Support & Detailed Stats               ║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+if [[ -n "$PROXY_URL" ]]; then
+    echo -e "${CYAN}Using proxy: ${PROXY_IP}:${PROXY_PORT}${NC}"
+else
+    echo -e "${YELLOW}No proxy specified. Use: ./grab_plugins.sh ip:port:user:pass${NC}"
+fi
 echo ""
 
 # Check dependencies
@@ -46,16 +75,13 @@ mkdir -p "$LOCAL_DIR"
 BACKUP_DIR="$PROJECT_DIR/plugins/backups"
 mkdir -p "$BACKUP_DIR"
 TODAY=$(date +%Y-%m-%d)
-BACKUP_PATH="$BACKUP_DIR/local_$TODAY"
+TIMESTAMP=$(date +%H%M%S)
+BACKUP_PATH="$BACKUP_DIR/local_${TODAY}_${TIMESTAMP}"
 
 if [[ -d "$LOCAL_DIR" ]] && [[ $(find "$LOCAL_DIR" -name "*.js" 2>/dev/null | head -1) ]]; then
     echo -e "${YELLOW}Creating backup: $BACKUP_PATH${NC}"
-    if [[ -d "$BACKUP_PATH" ]]; then
-        echo -e "${YELLOW}Backup already exists for today, skipping...${NC}"
-    else
-        cp -r "$LOCAL_DIR" "$BACKUP_PATH"
-        echo -e "${GREEN}Backup created successfully${NC}"
-    fi
+    cp -r "$LOCAL_DIR" "$BACKUP_PATH"
+    echo -e "${GREEN}Backup created successfully${NC}"
     echo ""
 fi
 
@@ -64,6 +90,13 @@ TOTAL=0
 SUCCESS=0
 FAILED=0
 SKIPPED=0
+PROXY_USED=0
+CORS_USED=0
+BYTES_DOWNLOADED=0
+
+# Arrays for tracking
+declare -a FAILED_PLUGINS=()
+declare -a SUCCESS_PLUGINS=()
 
 # Function to sanitize filename (use dashes, not underscores)
 sanitize_filename() {
@@ -85,6 +118,47 @@ map_group_name() {
     esac
 }
 
+# Function to download with fallback
+download_with_fallback() {
+    local url="$1"
+    local filepath="$2"
+    local method_used=""
+    
+    # Try 1: Direct download
+    if curl -sL --max-time 15 -o "$filepath" "$url" 2>/dev/null; then
+        if [[ -s "$filepath" ]] && ! grep -q "<!DOCTYPE html>" "$filepath" 2>/dev/null; then
+            method_used="direct"
+            return 0
+        fi
+    fi
+    
+    # Try 2: With proxy (if configured)
+    if [[ -n "$PROXY_URL" ]]; then
+        if curl -sL --max-time 15 --proxy "$PROXY_URL" -o "$filepath" "$url" 2>/dev/null; then
+            if [[ -s "$filepath" ]] && ! grep -q "<!DOCTYPE html>" "$filepath" 2>/dev/null; then
+                method_used="proxy"
+                ((PROXY_USED++))
+                return 0
+            fi
+        fi
+    fi
+    
+    # Try 3: CORS proxy (for HTTP URLs)
+    if [[ "$url" == http://* ]]; then
+        local cors_url="${CORS_PROXY}$(echo "$url" | sed 's/:/%3A/g; s/\//%2F/g')"
+        if curl -sL --max-time 20 -o "$filepath" "$cors_url" 2>/dev/null; then
+            if [[ -s "$filepath" ]] && ! grep -q "<!DOCTYPE html>" "$filepath" 2>/dev/null; then
+                method_used="cors"
+                ((CORS_USED++))
+                return 0
+            fi
+        fi
+    fi
+    
+    rm -f "$filepath"
+    return 1
+}
+
 # Function to download plugin
 download_plugin() {
     local url="$1"
@@ -103,33 +177,32 @@ download_plugin() {
     
     local filepath="$group_dir/$filename"
     
+    ((TOTAL++))
+    
     # Skip if already exists
     if [[ -f "$filepath" ]]; then
-        echo -e "${YELLOW}  ↳ Skipped (exists): $name${NC}"
+        echo -e "  ${YELLOW}↳ Skipped (exists):${NC} $name"
         ((SKIPPED++))
-        echo "$filepath"
-        return
+        return 0
     fi
     
-    # Download
-    echo -e "${BLUE}  ↳ Downloading: $name${NC}"
+    # Download with fallback
+    echo -e "  ${BLUE}↳ Downloading:${NC} $name"
     
-    if curl -sL --max-time 30 -o "$filepath" "$url" 2>/dev/null; then
-        # Check if file is valid (not empty and not HTML error page)
-        if [[ -s "$filepath" ]] && ! grep -q "<!DOCTYPE html>" "$filepath" 2>/dev/null; then
-            echo -e "${GREEN}    ✓ Saved: $filename${NC}"
-            ((SUCCESS++))
-            echo "$filepath"
-        else
-            rm -f "$filepath"
-            echo -e "${RED}    ✗ Invalid content${NC}"
-            ((FAILED++))
-            echo ""
-        fi
+    if download_with_fallback "$url" "$filepath"; then
+        local size=$(stat -f%z "$filepath" 2>/dev/null || stat -c%s "$filepath" 2>/dev/null || echo 0)
+        BYTES_DOWNLOADED=$((BYTES_DOWNLOADED + size))
+        
+        local size_kb=$((size / 1024))
+        echo -e "    ${GREEN}✓ Saved:${NC} $filename (${size_kb}KB)"
+        ((SUCCESS++))
+        SUCCESS_PLUGINS+=("$name")
+        return 0
     else
-        echo -e "${RED}    ✗ Download failed${NC}"
+        echo -e "    ${RED}✗ Failed:${NC} $name"
         ((FAILED++))
-        echo ""
+        FAILED_PLUGINS+=("$name|$url")
+        return 1
     fi
 }
 
@@ -142,34 +215,56 @@ GROUPS=$(jq -r '.groups | length' "$PLUGINS_JSON")
 echo -e "${GREEN}Found $GROUPS groups${NC}"
 echo ""
 
+START_TIME=$(date +%s)
+
 # Process each group
 for ((g=0; g<GROUPS; g++)); do
     GROUP_TITLE=$(jq -r ".groups[$g].title" "$PLUGINS_JSON")
     PLUGINS=$(jq -r ".groups[$g].plugins | length" "$PLUGINS_JSON")
     
-    echo -e "${YELLOW}━━━ $GROUP_TITLE ($PLUGINS plugins) ━━━${NC}"
+    echo -e "${MAGENTA}━━━ $GROUP_TITLE ($PLUGINS plugins) ━━━${NC}"
     
     for ((p=0; p<PLUGINS; p++)); do
         URL=$(jq -r ".groups[$g].plugins[$p].url" "$PLUGINS_JSON")
         NAME=$(jq -r ".groups[$g].plugins[$p].name" "$PLUGINS_JSON")
         
-        ((TOTAL++))
-        
-        download_plugin "$URL" "$NAME" "$GROUP_TITLE" > /dev/null
+        download_plugin "$URL" "$NAME" "$GROUP_TITLE"
     done
     
     echo ""
 done
 
+END_TIME=$(date +%s)
+DURATION=$((END_TIME - START_TIME))
+
+# Calculate sizes
+SIZE_MB=$(echo "scale=2; $BYTES_DOWNLOADED / 1048576" | bc 2>/dev/null || echo "0")
+
 # Summary
-echo -e "${BLUE}╔════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║                 Summary                    ║${NC}"
-echo -e "${BLUE}╠════════════════════════════════════════════╣${NC}"
-echo -e "${BLUE}║ Total:    ${NC}$TOTAL"
-echo -e "${BLUE}║ Success:  ${GREEN}$SUCCESS${NC}"
-echo -e "${BLUE}║ Failed:   ${RED}$FAILED${NC}"
-echo -e "${BLUE}║ Skipped:  ${YELLOW}$SKIPPED${NC}"
-echo -e "${BLUE}╚════════════════════════════════════════════╝${NC}"
+echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║                      Statistics                        ║${NC}"
+echo -e "${BLUE}╠════════════════════════════════════════════════════════╣${NC}"
+echo -e "${BLUE}║${NC} Total Plugins:     ${CYAN}$TOTAL${NC}"
+echo -e "${BLUE}║${NC} Successful:        ${GREEN}$SUCCESS${NC}"
+echo -e "${BLUE}║${NC} Failed:            ${RED}$FAILED${NC}"
+echo -e "${BLUE}║${NC} Skipped:           ${YELLOW}$SKIPPED${NC}"
+echo -e "${BLUE}╠════════════════════════════════════════════════════════╣${NC}"
+echo -e "${BLUE}║${NC} Downloaded:        ${CYAN}${SIZE_MB}MB${NC}"
+echo -e "${BLUE}║${NC} Time:              ${CYAN}${DURATION}s${NC}"
+echo -e "${BLUE}║${NC} Via Proxy:         ${MAGENTA}$PROXY_USED${NC}"
+echo -e "${BLUE}║${NC} Via CORS:          ${MAGENTA}$CORS_USED${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
+
+# Failed plugins list
+if [[ ${#FAILED_PLUGINS[@]} -gt 0 ]]; then
+    echo ""
+    echo -e "${RED}Failed plugins:${NC}"
+    for failed in "${FAILED_PLUGINS[@]}"; do
+        IFS='|' read -r name url <<< "$failed"
+        echo -e "  ${RED}✗${NC} $name"
+        echo -e "    ${YELLOW}$url${NC}"
+    done
+fi
 
 # Update date in plugins.json
 TODAY=$(date +%Y-%m-%d)
@@ -187,10 +282,25 @@ fi
 
 # List downloaded files
 echo ""
-echo -e "${BLUE}Downloaded plugins:${NC}"
-find "$LOCAL_DIR" -name "*.js" -type f | head -20
+echo -e "${BLUE}Local plugins directory:${NC}"
+echo -e "$LOCAL_DIR"
+echo ""
+
+# Count files by category
+echo -e "${BLUE}Files by category:${NC}"
+for dir in "$LOCAL_DIR"/*/; do
+    if [[ -d "$dir" ]]; then
+        count=$(find "$dir" -name "*.js" -type f | wc -l | tr -d ' ')
+        dirname=$(basename "$dir")
+        echo -e "  ${CYAN}$dirname:${NC} $count plugins"
+    fi
+done
 
 echo ""
 echo -e "${GREEN}Done! Plugins saved to: $LOCAL_DIR${NC}"
-echo -e "${GREEN}Updated date in plugins.json: $TODAY${NC}"
 
+if [[ $FAILED -gt 0 ]]; then
+    echo ""
+    echo -e "${YELLOW}Tip: Try with proxy to download failed plugins:${NC}"
+    echo -e "${CYAN}./grab_plugins.sh 150.241.110.232:7236:dvpizwym:4dkg4n8qf1qz${NC}"
+fi

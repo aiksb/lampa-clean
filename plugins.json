@@ -129,10 +129,16 @@
                     "auto_load": true
                 },
                 {
-                    "name": "Cub Premium OFF",
-                    "url": "https://bylampa.github.io/cub_off.js",
-                    "description": "Убирает рекламу и навязывание CUB Premium",
+                    "name": "🛡️ AdBlock Clean",
+                    "url": "./plugins/adblock.js",
+                    "description": "✅ Наш блокировщик рекламы без привязок",
                     "auto_load": true
+                },
+                {
+                    "name": "Cub OFF (bylampa)",
+                    "url": "https://bylampa.github.io/cub_off.js",
+                    "description": "⛔ Привязка к домену bylampa - НЕ РАБОТАЕТ",
+                    "auto_load": false
                 },
                 {
                     "name": "TMDB Proxy (bylampa)",
