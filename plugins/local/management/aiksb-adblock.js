@@ -1,12 +1,12 @@
 /**
- * Lampa Clean - Ad Blocker v1.2
- * Provider: Lampa Clean (github.com/aiksb/lampa-clean)
+ * Lampa Clean - Ad Blocker v1.3
+ * Provider: aiksb (github.com/aiksb/lampa-clean)
  * 
  * Clean ad blocking without domain locks.
  * Combines multiple ad blocking techniques:
  * - Settings overrides
  * - CSS injection
- * - Fetch interception  
+ * - Player hook to skip preroll
  * - Premium status spoof
  * - DOM observer for ad removal
  * 
@@ -20,10 +20,9 @@
 (function () {
     'use strict';
 
-    console.log('[Lampa Clean AdBlock v1.2] Initializing...');
+    console.log('[aiksb-adblock v1.3] Initializing...');
 
     // ==================== LAMPA SETTINGS OVERRIDES ====================
-    // Disable all premium/ad features at the settings level
     window.lampa_settings = window.lampa_settings || {};
     window.lampa_settings.socket_use = false;
     window.lampa_settings.socket_url = undefined;
@@ -46,7 +45,7 @@
     // Disable premium features
     window.lampa_settings.disable_features = window.lampa_settings.disable_features || {};
     window.lampa_settings.disable_features.dmca = true;
-    window.lampa_settings.disable_features.reactions = false; // Keep reactions
+    window.lampa_settings.disable_features.reactions = false;
     window.lampa_settings.disable_features.discuss = true;
     window.lampa_settings.disable_features.ai = true;
     window.lampa_settings.disable_features.persons = true;
@@ -63,380 +62,353 @@
     window.lampa_settings.developer.nodemo = false;
     window.lampa_settings.developer.fps = false;
 
-    // Force TV platform for better compatibility
-    try {
-        if (window.Lampa?.Platform?.tv) {
-            Lampa.Platform.tv();
-        }
-    } catch (e) {
-        // Platform API might not be available yet
-    }
-
     // ==================== PREMIUM STATUS SPOOF ====================
-    // Spoof premium account status (wrapped in try-catch for read-only props)
     function spoofPremium() {
         try {
             window.Account = window.Account || {};
-            if (!Object.getOwnPropertyDescriptor(window.Account, 'hasPremium')?.configurable === false) {
-                Object.defineProperty(window.Account, 'hasPremium', {
+            Object.defineProperty(window.Account, 'hasPremium', {
+                value: function () { return true; },
+                writable: true,
+                configurable: true
+            });
+        } catch (e) { }
+
+        try {
+            if (window.Lampa?.Account) {
+                Object.defineProperty(window.Lampa.Account, 'hasPremium', {
                     value: function () { return true; },
                     writable: true,
                     configurable: true
                 });
             }
-        } catch (e) {
-            // Property already defined and not configurable
-        }
-
-        // Also spoof Lampa.Account if exists
-        try {
-            if (window.Lampa?.Account) {
-                const descriptor = Object.getOwnPropertyDescriptor(window.Lampa.Account, 'hasPremium');
-                if (!descriptor || descriptor.configurable !== false) {
-                    Object.defineProperty(window.Lampa.Account, 'hasPremium', {
-                        value: function () { return true; },
-                        writable: true,
-                        configurable: true
-                    });
-                }
-            }
-        } catch (e) {
-            // Property protected
-        }
+        } catch (e) { }
     }
 
     spoofPremium();
 
-    // ==================== CSS INJECTION ====================
-    function injectAdBlockCSS() {
-        // Check if already injected
-        if (document.getElementById('lampa-clean-adblock')) return;
+    // ==================== VIDEO MUTING (BLOCKS AD AUDIO) ====================
+    // Intercept all video elements to prevent ad audio from playing
+    var adVideoPatterns = ['preroll', 'ad-', '_ad', 'advertisement', 'promo'];
 
-        const css = `
-            /* Hide ad-related elements */
-            .ad-server,
-            .ad-container,
-            .ad-banner,
-            .premium-banner,
-            .cub-premium,
-            .button--subscribe,
-            .button--book,
-            .notice--icon,
-            .icon--blink,
-            .open--broadcast,
-            .black-friday__button,
-            .womens_day__button,
-            .christmas__button,
-            [data-action="timetable"],
-            .selectbox-item--icon.cub-icon,
-            .settings-param--cub,
-            [data-name="terminal"],
-            [data-name="export"] {
-                display: none !important;
-            }
-            
-            /* Hide CUB Premium related elements */
-            .selector-cub,
-            .premium-text {
-                display: none !important;
-            }
-        `;
-
-        const style = document.createElement('style');
-        style.id = 'lampa-clean-adblock';
-        style.textContent = css;
-
-        if (document.head) {
-            document.head.appendChild(style);
-        } else {
-            // Wait for head to be available
-            document.addEventListener('DOMContentLoaded', function () {
-                document.head.appendChild(style);
-            });
-        }
+    function isAdVideo(src) {
+        if (!src) return false;
+        src = src.toLowerCase();
+        return adVideoPatterns.some(function (p) { return src.includes(p); });
     }
 
-    // ==================== AD REMOVAL FUNCTIONS ====================
-    function removeAds() {
-        // Remove ad server elements
-        const adSelectors = [
-            '.ad-server',
-            '.ad-container',
-            '.premium-banner',
-            '.button--subscribe',
-            '.button--book',
-            '.notice--icon',
-            '.open--broadcast',
-            '.black-friday__button',
-            '.womens_day__button',
-            '.christmas__button',
-            '[data-action="timetable"]'
-        ];
-
-        adSelectors.forEach(function (selector) {
-            try {
-                document.querySelectorAll(selector).forEach(function (el) {
-                    el.remove();
-                });
-            } catch (e) {
-                // Selector might be invalid in some environments
+    // Mute any video that looks like an ad
+    function muteAdVideos() {
+        document.querySelectorAll('video').forEach(function (v) {
+            if (isAdVideo(v.src) || isAdVideo(v.currentSrc)) {
+                v.muted = true;
+                v.volume = 0;
+                v.pause();
+                console.log('[aiksb-adblock] Muted ad video:', v.src);
             }
         });
     }
 
-    function removeSettingsAds() {
-        // Remove CUB Premium items from settings
-        const cubSelectors = [
-            '[data-name="card_quality"]',
-            '[data-name="terminal"]',
-            '[data-name="export"]',
-            '[data-name="card_interfice_reactions"]'
-        ];
+    // Override HTMLVideoElement.prototype.play to catch ads
+    if (!window._aiksbVideoPatched) {
+        window._aiksbVideoPatched = true;
+        var originalPlay = HTMLVideoElement.prototype.play;
 
-        cubSelectors.forEach(function (selector) {
-            try {
-                document.querySelectorAll(selector).forEach(function (el) {
-                    el.remove();
-                });
-            } catch (e) {
-                // Ignore
+        HTMLVideoElement.prototype.play = function () {
+            var video = this;
+            var src = video.src || video.currentSrc || '';
+
+            // Check if this is an ad video
+            if (isAdVideo(src)) {
+                console.log('[aiksb-adblock] Blocking ad video play:', src);
+                video.muted = true;
+                video.volume = 0;
+                // Dispatch ended event to skip ad
+                setTimeout(function () {
+                    video.dispatchEvent(new Event('ended'));
+                }, 10);
+                return Promise.resolve();
             }
+
+            return originalPlay.call(this);
+        };
+    }
+
+    // Also listen for new video elements
+    if (!window._aiksbVideoObserver) {
+        window._aiksbVideoObserver = new MutationObserver(function (mutations) {
+            mutations.forEach(function (m) {
+                m.addedNodes.forEach(function (node) {
+                    if (node.nodeName === 'VIDEO') {
+                        var v = node;
+                        if (isAdVideo(v.src)) {
+                            v.muted = true;
+                            v.volume = 0;
+                        }
+                    }
+                    // Check children
+                    if (node.querySelectorAll) {
+                        node.querySelectorAll('video').forEach(function (v) {
+                            if (isAdVideo(v.src)) {
+                                v.muted = true;
+                                v.volume = 0;
+                            }
+                        });
+                    }
+                });
+            });
         });
 
-        // Remove "CUB Premium" text items
-        try {
-            document.querySelectorAll('.settings-param').forEach(function (el) {
-                if (el.textContent &&
-                    (el.textContent.includes('CUB Premium') ||
-                        el.textContent.includes('CUB Premi'))) {
-                    el.remove();
-                }
-            });
-        } catch (e) {
-            // Ignore
+        if (document.body) {
+            window._aiksbVideoObserver.observe(document.body, { childList: true, subtree: true });
         }
     }
 
-    // ==================== VIDEO AD BLOCKING ====================
-    function blockVideoAds() {
-        // Override the ad display function if it exists
+    // ==================== PLAYER AD HOOK (MAIN FIX) ====================
+    // This directly hooks into Lampa's ad system to skip preroll instantly
+    function hookPlayerAds() {
+        if (!window.Lampa) {
+            setTimeout(hookPlayerAds, 100);
+            return;
+        }
+
+        // Method 1: Override Lampa.Ad completely
         try {
-            if (window.Lampa?.Ad) {
-                window.Lampa.Ad = {
-                    show: function () { return Promise.resolve(); },
+            if (Lampa.Ad) {
+                Lampa.Ad = {
+                    show: function (params) {
+                        console.log('[aiksb-adblock] Skipping ad, starting video directly');
+                        if (params && params.onComplete) {
+                            params.onComplete();
+                        }
+                        return Promise.resolve();
+                    },
                     load: function () { return Promise.resolve(); },
                     isReady: function () { return false; },
                     destroy: function () { }
                 };
             }
-        } catch (e) {
-            // Lampa.Ad might be protected
-        }
+        } catch (e) { }
 
-        // Block common ad video sources via fetch
-        if (typeof window.fetch === 'function' && !window._adblockFetchPatched) {
-            window._adblockFetchPatched = true;
-            const originalFetch = window.fetch;
-
-            window.fetch = function (url, options) {
-                if (typeof url === 'string') {
-                    // Block known ad domains (use exact domain matching to avoid false positives)
-                    const adDomains = [
-                        'googleads.g.doubleclick.net',
-                        'pagead2.googlesyndication.com',
-                        'adservice.google.com',
-                        'www.googleadservices.com',
-                        'an.yandex.ru',
-                        'mc.yandex.ru',
-                        'yandex.ru/ads'
-                    ];
-
-                    const isAd = adDomains.some(function (domain) {
-                        return url.includes(domain);
-                    });
-
-                    if (isAd) {
-                        console.log('[Lampa Clean AdBlock] Blocked ad request:', url);
-                        return Promise.reject(new Error('Blocked by AdBlock'));
+        // Method 2: Hook into player listener to skip ads
+        try {
+            Lampa.Listener.follow('player', function (e) {
+                if (e.type === 'start') {
+                    // Remove any ad overlays immediately
+                    var adOverlay = document.querySelector('.player-video__ad');
+                    if (adOverlay) {
+                        adOverlay.remove();
+                        console.log('[aiksb-adblock] Removed ad overlay from player');
                     }
                 }
-                return originalFetch.call(this, url, options);
-            };
+            });
+        } catch (e) { }
+
+        // Method 3: Override ad callback in PlayerVideo if exists
+        try {
+            if (Lampa.PlayerVideo) {
+                var originalCreate = Lampa.PlayerVideo.create;
+                if (originalCreate) {
+                    Lampa.PlayerVideo.create = function () {
+                        var result = originalCreate.apply(this, arguments);
+                        // Skip any ad initialization
+                        if (result && result.ad) {
+                            result.ad = {
+                                show: function () { },
+                                destroy: function () { }
+                            };
+                        }
+                        return result;
+                    };
+                }
+            }
+        } catch (e) { }
+
+        // Method 4: Intercept video stream requests
+        try {
+            Lampa.Listener.follow('full', function (e) {
+                if (e.type === 'complite') {
+                    // Ensure no ad elements are present when entering fullscreen
+                    setTimeout(function () {
+                        var ads = document.querySelectorAll('.ad-server, .ad-container, .player-video__ad, .preroll');
+                        ads.forEach(function (ad) { ad.remove(); });
+                    }, 50);
+                }
+            });
+        } catch (e) { }
+    }
+
+    // ==================== CSS INJECTION ====================
+    function injectAdBlockCSS() {
+        if (document.getElementById('aiksb-adblock-css')) return;
+
+        var css = `
+            /* Hide ad elements */
+            .ad-server, .ad-container, .ad-banner, .premium-banner, .cub-premium,
+            .button--subscribe, .button--book, .notice--icon, .icon--blink,
+            .open--broadcast, .black-friday__button, .womens_day__button,
+            .christmas__button, [data-action="timetable"], .selectbox-item--icon.cub-icon,
+            .settings-param--cub, [data-name="terminal"], [data-name="export"],
+            .selector-cub, .premium-text, .player-video__ad, .preroll {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+        `;
+
+        var style = document.createElement('style');
+        style.id = 'aiksb-adblock-css';
+        style.textContent = css;
+
+        if (document.head) {
+            document.head.appendChild(style);
         }
     }
 
-    // ==================== PREROLL AD BLOCKING ====================
-    var adObserver = null;
+    // ==================== AD REMOVAL ====================
+    function removeAds() {
+        var selectors = [
+            '.ad-server', '.ad-container', '.premium-banner',
+            '.button--subscribe', '.button--book', '.notice--icon',
+            '.open--broadcast', '.black-friday__button', '.womens_day__button',
+            '.christmas__button', '[data-action="timetable"]',
+            '.player-video__ad', '.preroll'
+        ];
 
-    function blockPrerollAds() {
-        // Only observe once
-        if (adObserver) return;
+        selectors.forEach(function (sel) {
+            try {
+                document.querySelectorAll(sel).forEach(function (el) { el.remove(); });
+            } catch (e) { }
+        });
+    }
 
-        // Wait for body to be available
-        if (!document.body) {
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', blockPrerollAds);
-            } else {
-                setTimeout(blockPrerollAds, 100);
-            }
+    function removeSettingsAds() {
+        var selectors = [
+            '[data-name="card_quality"]', '[data-name="terminal"]',
+            '[data-name="export"]', '[data-name="card_interfice_reactions"]'
+        ];
+
+        selectors.forEach(function (sel) {
+            try {
+                document.querySelectorAll(sel).forEach(function (el) { el.remove(); });
+            } catch (e) { }
+        });
+
+        try {
+            document.querySelectorAll('.settings-param').forEach(function (el) {
+                if (el.textContent && el.textContent.includes('CUB Premium')) {
+                    el.remove();
+                }
+            });
+        } catch (e) { }
+    }
+
+    // ==================== DOM OBSERVER ====================
+    var observer = null;
+
+    function startObserver() {
+        if (observer || !document.body) {
+            if (!document.body) setTimeout(startObserver, 100);
             return;
         }
 
-        // Monitor for ad overlay elements
-        adObserver = new MutationObserver(function (mutations) {
-            var shouldClean = false;
+        observer = new MutationObserver(function (mutations) {
+            var needsCleanup = false;
 
-            mutations.forEach(function (mutation) {
-                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                    mutation.addedNodes.forEach(function (node) {
+            mutations.forEach(function (m) {
+                if (m.addedNodes.length) {
+                    m.addedNodes.forEach(function (node) {
                         if (node.nodeType === 1) {
-                            // Check for ad classes
                             if (node.classList && (
                                 node.classList.contains('ad-server') ||
                                 node.classList.contains('ad-container') ||
-                                node.classList.contains('preroll')
+                                node.classList.contains('preroll') ||
+                                node.classList.contains('player-video__ad')
                             )) {
                                 node.remove();
-                                shouldClean = true;
-                            }
-
-                            // Check for "Реклама" text in specific ad containers
-                            if (node.className && typeof node.className === 'string' &&
-                                node.className.includes('ad-')) {
-                                if (node.textContent && node.textContent.includes('Реклама')) {
-                                    node.remove();
-                                    shouldClean = true;
-                                }
+                                needsCleanup = true;
+                                console.log('[aiksb-adblock] Removed ad element');
                             }
                         }
                     });
                 }
             });
 
-            // Run cleanup if ads were detected
-            if (shouldClean) {
-                removeAds();
-            }
+            if (needsCleanup) removeAds();
         });
 
-        adObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        observer.observe(document.body, { childList: true, subtree: true });
     }
 
     // ==================== EVENT LISTENERS ====================
-    function setupEventListeners() {
+    function setupListeners() {
         if (!window.Lampa?.Listener) {
-            setTimeout(setupEventListeners, 200);
+            setTimeout(setupListeners, 200);
             return;
         }
 
-        // Re-run premium spoof after Lampa is ready
         spoofPremium();
 
-        // On settings open - remove CUB items
         try {
-            if (Lampa.Settings?.listener) {
-                Lampa.Settings.listener.follow('open', function (event) {
-                    setTimeout(removeSettingsAds, 50);
+            Lampa.Settings?.listener?.follow('open', function () {
+                setTimeout(removeSettingsAds, 50);
+            });
+        } catch (e) { }
 
-                    if (event && event.name === 'server') {
-                        var adServer = document.querySelector('.ad-server');
-                        if (adServer) adServer.remove();
-                    }
-                });
-            }
-        } catch (e) {
-            // Settings listener not available
-        }
-
-        // On activity change
         try {
-            if (Lampa.Controller?.listener) {
-                Lampa.Controller.listener.follow('toggle', function (event) {
-                    if (event && event.name === 'full') {
-                        setTimeout(removeAds, 20);
-                    }
-                });
-            }
-        } catch (e) {
-            // Controller listener not available
-        }
-
-        // On app events
-        try {
-            Lampa.Listener.follow('app', function (event) {
-                if (event.type === 'ready') {
+            Lampa.Listener.follow('app', function (e) {
+                if (e.type === 'ready') {
                     removeAds();
                     removeSettingsAds();
                     spoofPremium();
                 }
-
-                if (event.type === 'complite' || event.type === 'complete') {
-                    setTimeout(removeAds, 100);
-                }
             });
-        } catch (e) {
-            // Listener not available
-        }
+        } catch (e) { }
 
-        // On activity events
         try {
-            Lampa.Listener.follow('activity', function (event) {
-                if (event.type === 'complite' || event.type === 'complete') {
-                    setTimeout(removeAds, 100);
-
-                    // Remove book/subscribe buttons
-                    var bookBtn = document.querySelector('.button--book');
-                    var subBtn = document.querySelector('.button--subscribe');
-                    if (bookBtn) bookBtn.remove();
-                    if (subBtn) subBtn.remove();
+            Lampa.Listener.follow('activity', function (e) {
+                if (e.type === 'complite' || e.type === 'complete') {
+                    setTimeout(removeAds, 50);
                 }
             });
-        } catch (e) {
-            // Listener not available
-        }
+        } catch (e) { }
+
+        // Hook player specifically
+        try {
+            Lampa.Listener.follow('player', function (e) {
+                if (e.type === 'start' || e.type === 'play') {
+                    // Immediately remove any ad overlays
+                    removeAds();
+                }
+            });
+        } catch (e) { }
     }
 
-    // ==================== INITIALIZATION ====================
+    // ==================== INIT ====================
     function init() {
-        // Inject CSS first (low risk)
         injectAdBlockCSS();
-
-        // Block video ads
-        blockVideoAds();
-
-        // Start DOM observer
-        blockPrerollAds();
+        hookPlayerAds();
+        startObserver();
 
         if (window.Lampa) {
-            setupEventListeners();
+            setupListeners();
             removeAds();
         } else {
-            // Wait for Lampa to load
-            var checkLampa = function () {
+            var check = function () {
                 if (window.Lampa) {
-                    setupEventListeners();
+                    setupListeners();
                     removeAds();
+                    hookPlayerAds();
                 } else {
-                    setTimeout(checkLampa, 300);
+                    setTimeout(check, 200);
                 }
             };
-
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', function () {
-                    setTimeout(checkLampa, 300);
-                });
-            } else {
-                setTimeout(checkLampa, 300);
-            }
+            setTimeout(check, 200);
         }
 
-        console.log('[Lampa Clean AdBlock v1.2] Initialized - Provider: Lampa Clean');
+        console.log('[aiksb-adblock v1.3] Ready - provider: aiksb');
     }
 
-    // Start initialization
     init();
 
 })();
