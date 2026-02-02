@@ -308,23 +308,35 @@
             title: group.title,
             items: items,
             onSelect: function (item) {
+                Lampa.Select.hide(); // Close current popup first
+
                 if (item.installed) {
                     // Ask to uninstall
-                    Lampa.Select.show({
-                        title: item.plugin.name,
-                        items: [
-                            { title: '🗑 Удалить плагин', action: 'uninstall' },
-                            { title: '❌ Отмена', action: 'cancel' }
-                        ],
-                        onSelect: function (action) {
-                            if (action.action === 'uninstall') {
-                                uninstallPlugin(item.plugin);
+                    setTimeout(() => {
+                        Lampa.Select.show({
+                            title: item.plugin.name,
+                            items: [
+                                { title: '🗑 Удалить плагин', action: 'uninstall' },
+                                { title: '❌ Отмена', action: 'cancel' }
+                            ],
+                            onSelect: function (action) {
+                                Lampa.Select.hide();
+                                if (action.action === 'uninstall') {
+                                    uninstallPlugin(item.plugin);
+                                }
+                                // Return to category list
+                                setTimeout(() => showCategoryPlugins(group), 100);
+                            },
+                            onBack: function () {
+                                setTimeout(() => showCategoryPlugins(group), 100);
                             }
-                        }
-                    });
+                        });
+                    }, 100);
                 } else {
-                    // Install
-                    installPlugin(item.plugin);
+                    // Install and return to list
+                    installPlugin(item.plugin).then(() => {
+                        setTimeout(() => showCategoryPlugins(group), 500);
+                    });
                 }
             },
             onBack: function () {
