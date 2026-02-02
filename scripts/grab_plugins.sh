@@ -139,6 +139,20 @@ echo -e "${BLUE}║ Failed:   ${RED}$FAILED${NC}"
 echo -e "${BLUE}║ Skipped:  ${YELLOW}$SKIPPED${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════╝${NC}"
 
+# Update date in plugins.json
+TODAY=$(date +%Y-%m-%d)
+echo ""
+echo -e "${BLUE}Updating plugins.json date to: $TODAY${NC}"
+
+# Update the 'updated' field
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    sed -i '' "s/\"updated\": \"[0-9-]*\"/\"updated\": \"$TODAY\"/" "$PLUGINS_JSON"
+else
+    # Linux
+    sed -i "s/\"updated\": \"[0-9-]*\"/\"updated\": \"$TODAY\"/" "$PLUGINS_JSON"
+fi
+
 # List downloaded files
 echo ""
 echo -e "${BLUE}Downloaded plugins:${NC}"
@@ -146,3 +160,5 @@ find "$LOCAL_DIR" -name "*.js" -type f | head -20
 
 echo ""
 echo -e "${GREEN}Done! Plugins saved to: $LOCAL_DIR${NC}"
+echo -e "${GREEN}Updated date in plugins.json: $TODAY${NC}"
+
