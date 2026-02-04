@@ -36,6 +36,7 @@
             await loadPluginDatabase();
             loadInstalledPlugins();
             await autoLoadPlugins();
+            await loadUserPlugins();
             registerSettingsComponent();
 
             isInitialized = true;
@@ -192,7 +193,24 @@
 
     // ==================== INSTALLATION ====================
     function isPluginInstalled(plugin) {
-        return installedPlugins.some(p => p.url === plugin.url);
+        if (!plugin) return false;
+
+        // Check our own list
+        const inOurList = installedPlugins.some(p =>
+            p.url === plugin.url ||
+            (p.name && plugin.name && p.name === plugin.name)
+        );
+        if (inOurList) return true;
+
+        // Check Lampa's native list if available
+        try {
+            const nativePlugins = Lampa.Storage.get('plugins') || [];
+            if (Array.isArray(nativePlugins)) {
+                return nativePlugins.some(p => (typeof p === 'string' ? p : p.url) === plugin.url);
+            }
+        } catch (e) { }
+
+        return false;
     }
 
     async function installPlugin(plugin) {
@@ -210,6 +228,7 @@
                 installed_at: new Date().toISOString()
             });
             saveInstalledPlugins();
+            syncWithLampa(plugin.url, 'add');
 
             notify('✓ ' + plugin.name + ' установлен');
             return true;
@@ -263,7 +282,30 @@
     function uninstallPlugin(plugin) {
         installedPlugins = installedPlugins.filter(p => p.url !== plugin.url);
         saveInstalledPlugins();
+        syncWithLampa(plugin.url, 'remove');
         notify('✓ ' + plugin.name + ' удален');
+    }
+
+    function syncWithLampa(url, action) {
+        try {
+            let nativePlugins = Lampa.Storage.get('plugins') || [];
+            if (typeof nativePlugins === 'string') {
+                nativePlugins = nativePlugins.split(',').filter(p => p.trim());
+            }
+
+            if (action === 'add') {
+                const alreadyHas = nativePlugins.some(p => (typeof p === 'string' ? p : p.url) === url);
+                if (!alreadyHas) {
+                    nativePlugins.push(url);
+                }
+            } else if (action === 'remove') {
+                nativePlugins = nativePlugins.filter(p => (typeof p === 'string' ? p : p.url) !== url);
+            }
+
+            Lampa.Storage.set('plugins', nativePlugins);
+        } catch (e) {
+            console.error('[Lampa Clean] Sync with Lampa failed:', e);
+        }
     }
 
     // ==================== AUTO LOAD ====================
@@ -277,15 +319,44 @@
             });
         });
 
-        console.log('[Lampa Clean] Auto-loading ' + autoPlugins.length + ' plugins...');
+        console.log('[Lampa Clean] Auto-loading ' + autoPlugins.length + ' base plugins...');
 
         for (const plugin of autoPlugins) {
             try {
-                await loadPlugin(plugin.url, plugin.name, false);
+                // Check if already loaded by native Lampa to avoid double execution
+                if (!isAlreadyLoaded(plugin.url)) {
+                    await loadPlugin(plugin.url, plugin.name, false);
+                }
             } catch (e) {
                 console.warn('[Lampa Clean] Auto-load failed:', plugin.name);
             }
         }
+    }
+
+    async function loadUserPlugins() {
+        console.log('[Lampa Clean] Loading ' + installedPlugins.length + ' user plugins...');
+
+        for (const plugin of installedPlugins) {
+            try {
+                // Avoid double loading if it's already in autoPlugins or loaded by Lampa
+                if (!isAlreadyLoaded(plugin.url)) {
+                    await loadPlugin(plugin.url, plugin.name, false);
+                }
+            } catch (e) {
+                console.warn('[Lampa Clean] User plugin load failed:', plugin.name, e);
+            }
+        }
+    }
+
+    function isAlreadyLoaded(url) {
+        const scripts = document.getElementsByTagName('script');
+        const fixedUrl = fixUrl(url);
+        for (let i = 0; i < scripts.length; i++) {
+            if (scripts[i].src && (scripts[i].src === url || scripts[i].src.includes(fixedUrl) || url.includes(scripts[i].src))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ==================== NOTIFICATIONS ====================
