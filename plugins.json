@@ -188,6 +188,11 @@
             "title": "🎥 Онлайн",
             "plugins": [
                 {
+                    "name": "🚀 aiksb-unison (All-in-one)",
+                    "url": "./plugins/local/online/aiksb-unison.js",
+                    "description": "🌟 [aiksb] Универсальный поиск: VideoCDN + Kodik в одном окне. Не нужно переключать!"
+                },
+                {
                     "name": "Онлайн Prestige (BWA)",
                     "url": "https://bwa.to/plugins/prestige.js",
                     "description": "⛔ Сервер недоступен - bwa.to не отвечает"
