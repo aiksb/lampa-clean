@@ -1,7 +1,7 @@
 /**
- * Lampa Clean - Plugin System v2.2.4
+ * Lampa Clean - Plugin System v2.2.5
  * 
- * Fixed: parallel load prevention, version strings, sync optimization
+ * Fixed: syntax error (missing header tag), version 2.2.5
  */
 
 (function () {
@@ -37,7 +37,7 @@
         if (isInitialized || window.__LAMPA_CLEAN_INIT__) return;
         window.__LAMPA_CLEAN_INIT__ = true;
 
-        console.log('[Lampa Clean] Initializing plugin system v2.2.4...');
+        console.log('[Lampa Clean] Initializing plugin system v2.2.5...');
 
         try {
             await loadPluginDatabase();
@@ -564,7 +564,7 @@
                     });
                 }
 
-                console.log('[Lampa Clean] Settings v2.2.4 registered');
+                console.log('[Lampa Clean] Settings v2.2.5 registered');
             }
         }, 100);
 
