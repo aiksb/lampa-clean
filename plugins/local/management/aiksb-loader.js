@@ -1,7 +1,7 @@
 /**
  * Lampa Clean - Plugin System v2.2.5
  * 
- * Fixed: syntax error (missing header tag), version 2.2.5
+ * Fixed: parallel load prevention, sync with Lampa v3+ (u.replace fix), version 2.2.6
  */
 
 (function () {
@@ -37,9 +37,10 @@
         if (isInitialized || window.__LAMPA_CLEAN_INIT__) return;
         window.__LAMPA_CLEAN_INIT__ = true;
 
-        console.log('[Lampa Clean] Initializing plugin system v2.2.4...');
+        console.log('[Lampa Clean] Initializing plugin system v2.2.6...');
 
         try {
+            cleanupNativeStorage(); // Remove ghost plugins
             await loadPluginDatabase();
             loadInstalledPlugins();
             await autoLoadPlugins();
@@ -50,9 +51,33 @@
             console.log('[Lampa Clean] Plugin system initialized');
         } catch (error) {
             console.error('[Lampa Clean] Init failed:', error);
+            window.__LAMPA_CLEAN_INIT__ = false;
         }
     }
 
+    // ==================== CLEANUP ====================
+    function cleanupNativeStorage() {
+        try {
+            let plugins = Lampa.Storage.get('plugins') || [];
+            if (!Array.isArray(plugins)) {
+                if (typeof plugins === 'string') plugins = plugins.split(',').filter(p => p.trim());
+                else plugins = [];
+            }
+
+            // Filter out nulls, undefineds, non-string/non-object items
+            const cleaned = plugins.filter(item => {
+                if (!item) return false;
+                if (typeof item === 'string') return item.length > 5;
+                if (typeof item === 'object' && item.url) return typeof item.url === 'string';
+                return false;
+            });
+
+            if (cleaned.length !== plugins.length) {
+                console.log('[Lampa Clean] Removed ' + (plugins.length - cleaned.length) + ' invalid plugins from Lampa storage');
+                Lampa.Storage.set('plugins', cleaned);
+            }
+        } catch (e) { }
+    }
     // ==================== DATABASE ====================
     async function loadPluginDatabase() {
         try {
@@ -215,8 +240,7 @@
 
         // Check our own list
         const inOurList = installedPlugins.some(p =>
-            p.url === plugin.url ||
-            (p.name && plugin.name && p.name === plugin.name)
+            p && (p.url === plugin.url || (p.name && plugin.name && p.name === plugin.name))
         );
         if (inOurList) return true;
 
@@ -224,7 +248,11 @@
         try {
             const nativePlugins = Lampa.Storage.get('plugins') || [];
             if (Array.isArray(nativePlugins)) {
-                return nativePlugins.some(p => (typeof p === 'string' ? p : p.url) === plugin.url);
+                return nativePlugins.some(p => {
+                    if (!p) return false;
+                    const url = typeof p === 'string' ? p : p.url;
+                    return url === plugin.url;
+                });
             }
         } catch (e) { }
 
@@ -312,12 +340,22 @@
             }
 
             if (action === 'add') {
-                const alreadyHas = nativePlugins.some(p => (typeof p === 'string' ? p : p.url) === url);
+                const alreadyHas = nativePlugins.some(p => {
+                    if (!p) return false;
+                    const pUrl = typeof p === 'string' ? p : p.url;
+                    return pUrl === url;
+                });
+
                 if (!alreadyHas) {
-                    nativePlugins.push(url);
+                    // Standard Lampa v3 format is object
+                    nativePlugins.push({ url: url, status: 1 });
                 }
             } else if (action === 'remove') {
-                nativePlugins = nativePlugins.filter(p => (typeof p === 'string' ? p : p.url) !== url);
+                nativePlugins = nativePlugins.filter(p => {
+                    if (!p) return false;
+                    const pUrl = typeof p === 'string' ? p : p.url;
+                    return pUrl !== url;
+                });
             }
 
             Lampa.Storage.set('plugins', nativePlugins);
@@ -360,8 +398,12 @@
             let changed = false;
             installedPlugins.forEach(p => {
                 const url = p.url;
-                if (!nativePlugins.some(np => (typeof np === 'string' ? np : np.url) === url)) {
-                    nativePlugins.push(url);
+                if (!nativePlugins.some(np => {
+                    if (!np) return false;
+                    const npUrl = typeof np === 'string' ? np : np.url;
+                    return npUrl === url;
+                })) {
+                    nativePlugins.push({ url: url, status: 1 });
                     changed = true;
                 }
             });
@@ -563,7 +605,7 @@
                     });
                 }
 
-                console.log('[Lampa Clean] Settings v2.2.4 registered');
+                console.log('[Lampa Clean] Settings v2.2.6 registered');
             }
         }, 100);
 
