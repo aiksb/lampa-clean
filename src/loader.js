@@ -1,7 +1,7 @@
 /**
- * Lampa Clean - Plugin System v2.2.6
+ * Lampa Clean - Plugin System v2.2.7
  * 
- * Fixed: parallel load prevention, sync with Lampa v3+ (u.replace fix)
+ * Fixed: parallel load prevention, fix u.replace (force strings in storage)
  */
 
 (function () {
@@ -16,6 +16,7 @@
     const CONFIG = {
         PLUGIN_DB_URL: './plugins.json',
         STORAGE_KEY: 'lampa_clean_plugins',
+        STORAGE_SYNC_KEY: 'lampa_clean_sync_v2',
         SOURCE_KEY: 'lampa_clean_source',
         PLUGIN_TIMEOUT: 15000,
         LOCAL_PLUGINS_BASE: './plugins/local/',
@@ -37,10 +38,10 @@
         if (isInitialized || window.__LAMPA_CLEAN_INIT__) return;
         window.__LAMPA_CLEAN_INIT__ = true;
 
-        console.log('[Lampa Clean] Initializing plugin system v2.2.6...');
+        console.log('[Lampa Clean] Initializing plugin system v2.2.7...');
 
         try {
-            cleanupNativeStorage(); // Remove ghost plugins
+            cleanupNativeStorage(); // Force string format
             await loadPluginDatabase();
             loadInstalledPlugins();
             await autoLoadPlugins();
@@ -64,18 +65,15 @@
                 else plugins = [];
             }
 
-            // Filter out nulls, undefineds, non-string/non-object items
-            const cleaned = plugins.filter(item => {
-                if (!item) return false;
-                if (typeof item === 'string') return item.length > 5;
-                if (typeof item === 'object' && item.url) return typeof item.url === 'string';
-                return false;
-            });
+            // Critical fix: convert objects to strings to avoid 'u.replace is not a function'
+            const cleaned = plugins.map(item => {
+                if (!item) return null;
+                if (typeof item === 'string') return item.length > 5 ? item : null;
+                if (typeof item === 'object' && item.url) return item.url;
+                return null;
+            }).filter(Boolean);
 
-            if (cleaned.length !== plugins.length) {
-                console.log('[Lampa Clean] Removed ' + (plugins.length - cleaned.length) + ' invalid plugins from Lampa storage');
-                Lampa.Storage.set('plugins', cleaned);
-            }
+            Lampa.Storage.set('plugins', cleaned);
         } catch (e) { }
     }
 
@@ -348,7 +346,7 @@
                 });
 
                 if (!alreadyHas) {
-                    nativePlugins.push({ url: url, status: 1 });
+                    nativePlugins.push(url); // String only
                 }
             } else if (action === 'remove') {
                 nativePlugins = nativePlugins.filter(p => {
@@ -403,7 +401,7 @@
                     const npUrl = typeof np === 'string' ? np : np.url;
                     return npUrl === url;
                 })) {
-                    nativePlugins.push({ url: url, status: 1 });
+                    nativePlugins.push(url); // String only
                     changed = true;
                 }
             });
@@ -605,7 +603,7 @@
                     });
                 }
 
-                console.log('[Lampa Clean] Settings v2.2.6 registered');
+                console.log('[Lampa Clean] Settings v2.2.7 registered');
             }
         }, 100);
 
