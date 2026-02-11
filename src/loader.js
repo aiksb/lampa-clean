@@ -1,7 +1,7 @@
 /**
- * Lampa Clean - Plugin System v2.2.3
+ * Lampa Clean - Plugin System v2.2.4
  * 
- * Fixed: infinite loading loop (global flag + resilient matching)
+ * Fixed: parallel load prevention, version strings, sync optimization
  */
 
 (function () {
@@ -30,13 +30,14 @@
     let pluginDatabase = null;
     let installedPlugins = [];
     let isInitialized = false;
+    const loadingMap = new Map();
 
     // ==================== INITIALIZATION ====================
     async function init() {
         if (isInitialized || window.__LAMPA_CLEAN_INIT__) return;
         window.__LAMPA_CLEAN_INIT__ = true;
 
-        console.log('[Lampa Clean] Initializing plugin system v2.2.3...');
+        console.log('[Lampa Clean] Initializing plugin system v2.2.4...');
 
         try {
             await loadPluginDatabase();
@@ -49,7 +50,7 @@
             console.log('[Lampa Clean] Plugin system initialized');
         } catch (error) {
             console.error('[Lampa Clean] Init failed:', error);
-            window.__LAMPA_CLEAN_INIT__ = false; // Allow retry on fatal failure
+            window.__LAMPA_CLEAN_INIT__ = false;
         }
     }
 
@@ -122,10 +123,12 @@
 
     // ==================== PLUGIN LOADING ====================
     async function loadPlugin(url, name, showProgress = true) {
-        const fixedUrl = fixUrl(url);
-        const cacheUrl = fixedUrl + (fixedUrl.includes('?') ? '&' : '?') + 'v=' + Date.now();
+        if (loadingMap.has(url)) return loadingMap.get(url);
 
-        return new Promise((resolve, reject) => {
+        const promise = new Promise((resolve, reject) => {
+            const fixedUrl = fixUrl(url);
+            const cacheUrl = fixedUrl + (fixedUrl.includes('?') ? '&' : '?') + 'v=' + Date.now();
+
             let progressEl = showProgress ? showInstallProgress(name, 0) : null;
 
             const script = document.createElement('script');
@@ -166,6 +169,13 @@
 
             document.head.appendChild(script);
         });
+
+        loadingMap.set(url, promise);
+        try {
+            return await promise;
+        } finally {
+            loadingMap.delete(url);
+        }
     }
 
     // ==================== PROGRESS UI ====================
@@ -348,13 +358,15 @@
             let nativePlugins = Lampa.Storage.get('plugins') || [];
             if (typeof nativePlugins === 'string') nativePlugins = nativePlugins.split(',').filter(p => p);
 
+            let changed = false;
             installedPlugins.forEach(p => {
                 const url = p.url;
                 if (!nativePlugins.some(np => (typeof np === 'string' ? np : np.url) === url)) {
                     nativePlugins.push(url);
+                    changed = true;
                 }
             });
-            Lampa.Storage.set('plugins', nativePlugins);
+            if (changed) Lampa.Storage.set('plugins', nativePlugins);
         } catch (e) { }
 
         console.log('[Lampa Clean] Loading ' + installedPlugins.length + ' user plugins...');
@@ -552,7 +564,7 @@
                     });
                 }
 
-                console.log('[Lampa Clean] Settings v2.2.3 registered');
+                console.log('[Lampa Clean] Settings v2.2.4 registered');
             }
         }, 100);
 
