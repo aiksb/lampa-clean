@@ -123,15 +123,15 @@
             "title": "⚙️ Управление",
             "plugins": [
                 {
-                    "name": "🛡️ aiksb-adblock",
+                    "name": "aiksb-adblock",
                     "url": "./plugins/local/management/aiksb-adblock.js",
-                    "description": "✅ [aiksb] Блокировщик рекламы v1.2 - убирает преролл, CUB Premium, баннеры",
+                    "description": "[aiksb] AdBlocker v1.2 - removes preroll, CUB Premium, banners",
                     "auto_load": true
                 },
                 {
-                    "name": "🔧 aiksb-loader",
+                    "name": "aiksb-loader",
                     "url": "./plugins/local/management/aiksb-loader.js",
-                    "description": "✅ [aiksb] Загрузчик плагинов v2.2 - меню плагинов в настройках",
+                    "description": "[aiksb] Plugin Loader v2.2 - plugin menu in settings",
                     "auto_load": true
                 },
                 {
@@ -188,9 +188,9 @@
             "title": "🎥 Онлайн",
             "plugins": [
                 {
-                    "name": "🚀 aiksb-unison (All-in-one)",
+                    "name": "aiksb-unison (All-in-one)",
                     "url": "./plugins/local/online/aiksb-unison.js",
-                    "description": "🌟 [aiksb] Универсальный поиск: VideoCDN + Kodik в одном окне. Не нужно переключать!"
+                    "description": "[aiksb] Universal Search: VideoCDN + Kodik in one window. No switching needed!"
                 },
                 {
                     "name": "Онлайн Prestige (BWA)",

@@ -1,12 +1,9 @@
 /**
  * Lampa Clean - Universal Online Source [aiksb]
- * v1.1
+ * v1.0
  * 
  * Aggregates multiple online sources (VideoCDN, Kodik, etc.) into a single view.
  * No manual switching required.
- * 
- * SCRIPT_VERSION: v1.1.0
- * !!!IMPORTANT!!! FOLLOW INSTRUCTIONS IN .cursorrules /docs/instructions.md
  */
 (function () {
     'use strict';
@@ -37,14 +34,15 @@
                 this.searchKodik(kinopoisk_id, imdb_id);
             }
 
-            // Fallback: If no IDs, search by title
+            // Fallback: If no IDs, search by title (to be implemented)
             if (pending_requests === 0) {
-                component.empty(Lampa.Lang.translate('online_nodata') || 'No data found');
+                component.empty(Lampa.Lang.translate('online_nodata'));
             }
         };
 
         this.searchVideoCDN = function (kp_id) {
             var _this = this;
+            // Public-ish token found in many Lampa plugins
             var token = '3i40S5TSEC2SndqL88SOfSf9WvS7S6i8';
             var url = 'https://videocdn.tv/api/short?api_token=' + token + '&kp_id=' + kp_id;
 
@@ -54,7 +52,7 @@
                         all_results.push({
                             title: item.title,
                             source: 'VideoCDN',
-                            quality: 'HD',
+                            quality: '720p/1080p',
                             url: item.iframe_src,
                             type: 'iframe'
                         });
@@ -68,7 +66,7 @@
 
         this.searchKodik = function (kp_id, imdb_id) {
             var _this = this;
-            var token = 'd1e2e4e0e0e0e0e0e0e0e0e0e0e0e0e0';
+            var token = 'd1e2e4e0e0e0e0e0e0e0e0e0e0e0e0e0'; // Generic public token
             var url = 'https://kodikapi.com/search?token=' + token + (kp_id ? '&kinopoisk_id=' + kp_id : '&imdb_id=' + imdb_id);
 
             network.silent(url, function (json) {
@@ -171,35 +169,27 @@
     }
 
     if (window.Lampa) {
-        Lampa.Component.add('aiksb_unison', Component);
+        Lampa.Component.add('aiksb_online', Component);
 
+        // Add to the "Online" list if we are on a movie card
         Lampa.Listener.follow('full', function (e) {
-            if (e.type === 'complite' || e.type === 'ready') {
-                // Ensure we don't add multiple buttons
-                if ($('.aiksb-unison-btn').length) return;
-
-                var btn = $('<div class="button selector button--online aiksb-unison-btn">Online (aiksb)</div>');
-
+            if (e.type === 'complite') {
+                var btn = $('<div class="button selector button--online aiksb-unison-btn">Онлайн (aiksb)</div>');
                 btn.on('hover:enter', function () {
+                    Lampa.Component.add('aiksb_online', Component);
                     Lampa.Activity.push({
                         url: '',
-                        title: 'Online (aiksb)',
-                        component: 'aiksb_unison',
+                        title: 'Онлайн (aiksb)',
+                        component: 'aiksb_online',
                         movie: e.object.movie,
                         page: 1
                     });
                 });
 
-                // Add to main buttons group
+                // Try to insert before other online buttons or at the end
                 var container = $('.full-start__buttons');
                 if (container.length) {
-                    // Try to insert after the first button
-                    var firstBtn = container.find('.button').first();
-                    if (firstBtn.length) {
-                        btn.insertAfter(firstBtn);
-                    } else {
-                        container.append(btn);
-                    }
+                    container.append(btn);
                 }
             }
         });

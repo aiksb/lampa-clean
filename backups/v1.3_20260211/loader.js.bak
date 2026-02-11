@@ -1,7 +1,7 @@
 /**
- * Lampa Clean - Plugin System v2.2.1
+ * Lampa Clean - Plugin System v2.2
  * 
- * Fixed: installation sync, removed emojis (cursor rules), cache busting
+ * Fixed: categories inside main component, proper click handlers, colored indicators
  */
 
 (function () {
@@ -30,7 +30,7 @@
     async function init() {
         if (isInitialized) return;
 
-        console.log('[Lampa Clean] Initializing plugin system v2.2.1...');
+        console.log('[Lampa Clean] Initializing plugin system v2.2...');
 
         try {
             await loadPluginDatabase();
@@ -94,7 +94,6 @@
     // ==================== URL HANDLING ====================
     function fixUrl(url) {
         const source = getPluginSource();
-        let finalUrl = url;
 
         if (source === 'local') {
             let filename = url.split('/').pop().split('?')[0];
@@ -102,18 +101,15 @@
                 const parts = url.split('/').filter(p => p);
                 filename = parts[parts.length - 1] + '.js';
             }
-            finalUrl = CONFIG.LOCAL_PLUGINS_BASE + filename;
+            return CONFIG.LOCAL_PLUGINS_BASE + filename;
         }
 
-        if (window.location.protocol === 'https:' && finalUrl.startsWith('http://')) {
+        if (window.location.protocol === 'https:' && url.startsWith('http://')) {
             const proxy = CONFIG.CORS_PROXIES[CONFIG.CURRENT_PROXY_INDEX];
-            finalUrl = proxy + encodeURIComponent(finalUrl);
+            return proxy + encodeURIComponent(url);
         }
 
-        // Add cache busting
-        finalUrl += (finalUrl.includes('?') ? '&' : '?') + 'v=' + Date.now();
-
-        return finalUrl;
+        return url;
     }
 
     // ==================== PLUGIN LOADING ====================
@@ -219,7 +215,7 @@
 
     async function installPlugin(plugin) {
         if (isPluginInstalled(plugin)) {
-            notify(plugin.name + ' already installed');
+            notify(plugin.name + ' уже установлен');
             return true;
         }
 
@@ -234,25 +230,25 @@
             saveInstalledPlugins();
             syncWithLampa(plugin.url, 'add');
 
-            notify('SUCCESS: ' + plugin.name + ' installed');
+            notify('✓ ' + plugin.name + ' установлен');
             return true;
         } catch (error) {
             console.error('[Lampa Clean] Install failed:', plugin.url, error);
 
-            let errorMsg = 'Load error';
+            let errorMsg = 'Ошибка загрузки';
             if (error.message === 'Timeout') {
-                errorMsg = 'Timeout - server not responding';
+                errorMsg = 'Таймаут - сервер не отвечает';
             } else if (error.message === 'Load failed') {
-                errorMsg = 'Server unreachable or blocked';
+                errorMsg = 'Сервер недоступен или заблокирован';
             }
 
-            notify('FAILED: ' + plugin.name + ': ' + errorMsg);
+            notify('✗ ' + plugin.name + ': ' + errorMsg);
             return false;
         }
     }
 
     async function installProfile(profile) {
-        notify('Installing profile: ' + profile.name);
+        notify('Установка профиля: ' + profile.name);
 
         let success = 0;
         for (const pluginName of profile.plugins) {
@@ -271,7 +267,7 @@
         }
 
         saveInstalledPlugins();
-        notify('Installed: ' + success + ' of ' + profile.plugins.length);
+        notify('Установлено: ' + success + ' из ' + profile.plugins.length);
     }
 
     function findPluginByName(name) {
@@ -287,7 +283,7 @@
         installedPlugins = installedPlugins.filter(p => p.url !== plugin.url);
         saveInstalledPlugins();
         syncWithLampa(plugin.url, 'remove');
-        notify('SUCCESS: ' + plugin.name + ' removed');
+        notify('✓ ' + plugin.name + ' удален');
     }
 
     function syncWithLampa(url, action) {
@@ -338,20 +334,6 @@
     }
 
     async function loadUserPlugins() {
-        // Also ensure they are in native Lampa storage for visibility
-        try {
-            let nativePlugins = Lampa.Storage.get('plugins') || [];
-            if (typeof nativePlugins === 'string') nativePlugins = nativePlugins.split(',').filter(p => p);
-
-            installedPlugins.forEach(p => {
-                const url = p.url;
-                if (!nativePlugins.some(np => (typeof np === 'string' ? np : np.url) === url)) {
-                    nativePlugins.push(url);
-                }
-            });
-            Lampa.Storage.set('plugins', nativePlugins);
-        } catch (e) { }
-
         console.log('[Lampa Clean] Loading ' + installedPlugins.length + ' user plugins...');
 
         for (const plugin of installedPlugins) {
@@ -390,8 +372,8 @@
     function showCategoryPlugins(group) {
         const items = group.plugins.map(plugin => {
             const installed = isPluginInstalled(plugin);
-            const indicator = installed ? '[YES]' : '[NO]';
-            const httpWarning = plugin.url?.startsWith('http://') ? ' (!)' : '';
+            const indicator = installed ? '🟢' : '🔴';
+            const httpWarning = plugin.url?.startsWith('http://') ? ' ⚠️' : '';
 
             return {
                 title: indicator + ' ' + plugin.name + httpWarning,
@@ -413,8 +395,8 @@
                         Lampa.Select.show({
                             title: item.plugin.name,
                             items: [
-                                { title: 'Uninstall plugin', action: 'uninstall' },
-                                { title: 'Cancel', action: 'cancel' }
+                                { title: '🗑 Удалить плагин', action: 'uninstall' },
+                                { title: '❌ Отмена', action: 'cancel' }
                             ],
                             onSelect: function (action) {
                                 Lampa.Select.hide();
@@ -451,7 +433,7 @@
                 // Register only ONE component
                 Lampa.SettingsApi.addComponent({
                     component: 'lampa_clean_plugins',
-                    name: 'My Plugins',
+                    name: 'Мои плагины',
                     icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>'
                 });
 
@@ -462,18 +444,18 @@
                         name: 'plugin_source',
                         type: 'select',
                         values: {
-                            original: 'Original (proxy)',
-                            local: 'Local copy'
+                            original: 'Оригинал (через прокси)',
+                            local: 'Локальная копия'
                         },
                         default: 'original'
                     },
                     field: {
-                        name: 'Plugin source',
-                        description: 'Updated: ' + (pluginDatabase?.updated || 'N/A')
+                        name: 'Источник плагинов',
+                        description: 'Обновлено: ' + (pluginDatabase?.updated || 'N/A')
                     },
                     onChange: function (value) {
                         setPluginSource(value);
-                        notify('Source: ' + (value === 'local' ? 'Local' : 'Original'));
+                        notify('Источник: ' + (value === 'local' ? 'Локальный' : 'Оригинал'));
                     }
                 });
 
@@ -488,7 +470,7 @@
                                 default: ''
                             },
                             field: {
-                                name: 'BOX: ' + profile.name,
+                                name: '📦 ' + profile.name,
                                 description: profile.description
                             },
                             onChange: function () {
@@ -504,7 +486,7 @@
                         if (!group.plugins?.length) return;
 
                         const installedCount = group.plugins.filter(p => isPluginInstalled(p)).length;
-                        const indicator = installedCount > 0 ? '[+]' : '[-]';
+                        const indicator = installedCount > 0 ? '🟢' : '🔴';
 
                         Lampa.SettingsApi.addParam({
                             component: 'lampa_clean_plugins',
@@ -515,7 +497,7 @@
                             },
                             field: {
                                 name: indicator + ' ' + group.title,
-                                description: installedCount + ' of ' + group.plugins.length + ' installed'
+                                description: installedCount + ' из ' + group.plugins.length + ' установлено'
                             },
                             onChange: function () {
                                 showCategoryPlugins(group);
@@ -524,7 +506,7 @@
                     });
                 }
 
-                console.log('[Lampa Clean] Settings v2.2.1 registered');
+                console.log('[Lampa Clean] Settings v2.2 registered');
             }
         }, 100);
 
