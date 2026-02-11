@@ -1,11 +1,16 @@
 /**
  * Lampa Clean - Plugin System v2.2.1
  * 
- * Fixed: installation sync, removed emojis (cursor rules), cache busting
+ * Fixed: installation sync, * Fixed: infinite loading loop (global flag + resilient matching), version 2.2.3
  */
 
 (function () {
     'use strict';
+
+    if (window.__LAMPA_CLEAN_INIT__) {
+        console.log('[Lampa Clean] System already running, skipping duplicate load.');
+        return;
+    }
 
     // ==================== CONFIGURATION ====================
     const CONFIG = {
@@ -28,9 +33,10 @@
 
     // ==================== INITIALIZATION ====================
     async function init() {
-        if (isInitialized) return;
+        if (isInitialized || window.__LAMPA_CLEAN_INIT__) return;
+        window.__LAMPA_CLEAN_INIT__ = true;
 
-        console.log('[Lampa Clean] Initializing plugin system v2.2.1...');
+        console.log('[Lampa Clean] Initializing plugin system v2.2.3...');
 
         try {
             await loadPluginDatabase();
@@ -110,21 +116,19 @@
             finalUrl = proxy + encodeURIComponent(finalUrl);
         }
 
-        // Add cache busting
-        finalUrl += (finalUrl.includes('?') ? '&' : '?') + 'v=' + Date.now();
-
         return finalUrl;
     }
 
     // ==================== PLUGIN LOADING ====================
     async function loadPlugin(url, name, showProgress = true) {
         const fixedUrl = fixUrl(url);
+        const cacheUrl = fixedUrl + (fixedUrl.includes('?') ? '&' : '?') + 'v=' + Date.now();
 
         return new Promise((resolve, reject) => {
             let progressEl = showProgress ? showInstallProgress(name, 0) : null;
 
             const script = document.createElement('script');
-            script.src = fixedUrl;
+            script.src = cacheUrl;
             script.async = true;
 
             let progress = 0;
@@ -367,10 +371,33 @@
     }
 
     function isAlreadyLoaded(url) {
+        if (!url) return false;
+
         const scripts = document.getElementsByTagName('script');
         const fixedUrl = fixUrl(url);
+        const cleanTarget = fixedUrl.split('?')[0].toLowerCase();
+        const cleanOriginal = url.split('?')[0].toLowerCase();
+
+        // Extract filename for loose matching
+        const getFileName = (path) => path.split('/').pop().split('?')[0].toLowerCase();
+        const targetFile = getFileName(url);
+
         for (let i = 0; i < scripts.length; i++) {
-            if (scripts[i].src && (scripts[i].src === url || scripts[i].src.includes(fixedUrl) || url.includes(scripts[i].src))) {
+            if (!scripts[i].src) continue;
+
+            const src = scripts[i].src.toLowerCase();
+            const cleanSrc = src.split('?')[0];
+
+            // 1. Direct match (absolute or relative)
+            if (cleanSrc === cleanTarget || cleanSrc === cleanOriginal) return true;
+
+            // 2. Inclusion match (for proxies or CDN paths)
+            if (cleanSrc.includes(cleanTarget) || cleanTarget.includes(cleanSrc)) return true;
+            if (cleanSrc.includes(cleanOriginal) || cleanOriginal.includes(cleanSrc)) return true;
+
+            // 3. Filename match for local vs remote (safety guard)
+            if (targetFile && targetFile.length > 5 && getFileName(src) === targetFile) {
+                // Only if it's likely a custom plugin (more than just "index.js")
                 return true;
             }
         }
