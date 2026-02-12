@@ -1,7 +1,7 @@
 /**
- * Lampa Clean - Plugin System v2.2.7
+ * Lampa Clean - Plugin System v2.2.8
  * 
- * Fixed: parallel load prevention, fix u.replace (force strings in storage)
+ * Fixed: parallel load prevention, fix u.replace (force strings in storage), version 2.2.8
  */
 
 (function () {
